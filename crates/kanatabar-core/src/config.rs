@@ -55,6 +55,36 @@ impl Default for Defaults {
     }
 }
 
+/// Whether `config.toml` was loaded, absent, or present-but-broken. The daemon
+/// tracks this so a parse failure is *surfaced* (doctor, logs) instead of the
+/// file being silently discarded — the original v0.1.0 behaviour, which left a
+/// user's presets mysteriously empty with only a buried log line.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConfigStatus {
+    /// No `config.toml` on disk — running on built-in defaults (normal).
+    Missing,
+    /// Parsed successfully; carries the preset count for a friendly detail.
+    Loaded {
+        /// Number of presets the file defines.
+        presets: usize,
+    },
+    /// Present but failed to parse; its presets and defaults are ignored and
+    /// the daemon runs on built-in defaults until it is fixed. Carries the
+    /// human-readable parse error (e.g. the `toml` message with line/column).
+    Invalid {
+        /// The parse/read error, rendered for display.
+        error: String,
+    },
+}
+
+impl ConfigStatus {
+    /// True when the file is present but could not be parsed (the actionable
+    /// failure doctor should flag).
+    pub fn is_invalid(&self) -> bool {
+        matches!(self, ConfigStatus::Invalid { .. })
+    }
+}
+
 /// The parsed `config.toml` (SPEC §3.2, §7.3): schema, defaults, presets.
 ///
 /// Modified only via IPC (`SetPresetList`) or sudo (SPEC §6.4); preset `.kbd`

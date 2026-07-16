@@ -42,13 +42,16 @@ pub mod checks {
     pub const CONTROL_SOCKET: &str = "control socket";
     /// The active preset's `.kbd` passes `kanata --check` (SPEC §6.4).
     pub const ACTIVE_CONFIG: &str = "active config";
+    /// `config.toml` parsed (or is absent) — a present-but-broken file is a
+    /// failure, so presets/defaults are never silently discarded (SPEC §7.3).
+    pub const CONFIG_FILE: &str = "config file";
     /// The supervisor is in a healthy (non-degraded) state.
     pub const SUPERVISOR: &str = "supervisor";
 }
 
 /// Every check name, in the canonical report order — the wizard and tests
 /// iterate this rather than hard-coding the list.
-pub const ALL_CHECKS: [&str; 11] = [
+pub const ALL_CHECKS: [&str; 12] = [
     checks::DAEMON,
     checks::KANATA_BINARY,
     checks::DRIVER_PRESENT,
@@ -59,6 +62,7 @@ pub const ALL_CHECKS: [&str; 11] = [
     checks::INPUT_MONITORING,
     checks::CONTROL_SOCKET,
     checks::ACTIVE_CONFIG,
+    checks::CONFIG_FILE,
     checks::SUPERVISOR,
 ];
 

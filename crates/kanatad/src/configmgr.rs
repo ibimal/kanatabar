@@ -18,11 +18,11 @@ use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use kanatabar_core::config::{ConfigFile, PresetDef, SAFE_CONFIG};
+use kanatabar_core::config::{ConfigFile, ConfigStatus, PresetDef, SAFE_CONFIG};
 use kanatabar_core::ipc::{Event, PresetInfo};
 use kanatabar_core::pathsafety::{self, PathFacts, PathReject};
 use tokio::sync::Mutex;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 use crate::child::{self, Preflight};
 use crate::config::SpawnTarget;
@@ -95,6 +95,9 @@ pub struct ConfigManager {
     default_bin: PathBuf,
     preflight_timeout: Duration,
     file: std::sync::Arc<Mutex<ConfigFile>>,
+    /// Load/parse outcome of the on-disk `config.toml`, surfaced by `doctor`
+    /// (SPEC §9) so a broken file never fails silently. Updated on reload.
+    status: std::sync::Arc<Mutex<ConfigStatus>>,
     events: DaemonEvents,
 }
 
@@ -110,10 +113,7 @@ impl ConfigManager {
         preflight_timeout: Duration,
         events: DaemonEvents,
     ) -> Self {
-        let file = read_config_file(&paths.config_toml).unwrap_or_else(|err| {
-            warn!(%err, path = %paths.config_toml.display(), "using default config");
-            ConfigFile::default()
-        });
+        let (file, status) = load_with_status(&paths.config_toml);
         Self {
             supervisor,
             active,
@@ -121,8 +121,15 @@ impl ConfigManager {
             default_bin,
             preflight_timeout,
             file: std::sync::Arc::new(Mutex::new(file)),
+            status: std::sync::Arc::new(Mutex::new(status)),
             events,
         }
+    }
+
+    /// The load/parse status of `config.toml` (SPEC §9 doctor). A broken file
+    /// is reported, never silently ignored.
+    pub async fn config_status(&self) -> ConfigStatus {
+        self.status.lock().await.clone()
     }
 
     /// The active spawn target (kanata bin + `.kbd`), for diagnostics
@@ -419,6 +426,37 @@ fn read_config_file(path: &Path) -> io::Result<ConfigFile> {
     toml::from_str(&text).map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
 }
 
+/// Load `config.toml` and classify the outcome (SPEC §7.3, §9). A missing file
+/// is normal (built-in defaults); a present-but-broken file is **never
+/// silently discarded** — it is logged at ERROR and reported by `doctor` via
+/// the returned [`ConfigStatus`], while the daemon keeps running on defaults so
+/// a typo can't take the keyboard down (the §6.4 invariant).
+fn load_with_status(path: &Path) -> (ConfigFile, ConfigStatus) {
+    match read_config_file(path) {
+        Ok(file) => {
+            let presets = file.presets.len();
+            (file, ConfigStatus::Loaded { presets })
+        }
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+            (ConfigFile::default(), ConfigStatus::Missing)
+        }
+        Err(err) => {
+            // The source `toml` error carries line/column; surface it verbatim.
+            let error = err
+                .get_ref()
+                .map(|inner| inner.to_string())
+                .unwrap_or_else(|| err.to_string());
+            error!(
+                path = %path.display(),
+                %error,
+                "config.toml is invalid — its presets and defaults are ignored; \
+                 fix it and run `kanatactl config reload`"
+            );
+            (ConfigFile::default(), ConfigStatus::Invalid { error })
+        }
+    }
+}
+
 /// Serialize and atomically write `config.toml` at mode 0644 (SPEC §3.2).
 fn write_config_file(path: &Path, file: &ConfigFile) -> io::Result<()> {
     if let Some(parent) = path.parent() {
@@ -465,6 +503,38 @@ pub fn load_config_file(path: &Path) -> Option<ConfigFile> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A missing file is normal; a valid file loads with its preset count; a
+    /// broken file is reported `Invalid` (not silently discarded) while the
+    /// returned config falls back to defaults so the daemon keeps running.
+    #[test]
+    fn load_with_status_classifies_the_three_outcomes() {
+        let dir = tempfile::tempdir().unwrap();
+
+        let missing = dir.path().join("config.toml");
+        let (file, status) = load_with_status(&missing);
+        assert_eq!(status, ConfigStatus::Missing);
+        assert!(file.presets.is_empty());
+
+        let valid = dir.path().join("valid.toml");
+        fs::write(
+            &valid,
+            "schema = 1\n[presets.main]\nconfig = \"/tmp/x.kbd\"\n",
+        )
+        .unwrap();
+        let (file, status) = load_with_status(&valid);
+        assert_eq!(status, ConfigStatus::Loaded { presets: 1 });
+        assert_eq!(file.presets.len(), 1);
+
+        let broken = dir.path().join("broken.toml");
+        fs::write(&broken, "schema = 1\n[presets.main\nconfig = oops").unwrap();
+        let (file, status) = load_with_status(&broken);
+        assert!(status.is_invalid(), "broken file must report Invalid");
+        assert!(
+            file.presets.is_empty(),
+            "broken file falls back to empty defaults"
+        );
+    }
 
     /// The §7.3 example `config.toml` parses into the expected model.
     #[test]

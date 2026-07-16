@@ -64,8 +64,32 @@ pub async fn run(
         input_monitoring_check(),
         socket_check(socket_path),
         active_config_check(configmgr, peer_uid).await,
+        config_file_check(configmgr).await,
         supervisor_check(supervisor),
     ]
+}
+
+/// SPEC §7.3/§9: report whether `config.toml` loaded. A present-but-broken
+/// file is a **failure** — its presets and defaults are ignored — so the v0.1.0
+/// silent-fallback (empty presets, no signal) can't recur. Missing is fine.
+async fn config_file_check(configmgr: &ConfigManager) -> DoctorCheck {
+    use kanatabar_core::config::ConfigStatus;
+    match configmgr.config_status().await {
+        ConfigStatus::Missing => ok(
+            checks::CONFIG_FILE,
+            "no config.toml (using built-in defaults)",
+        ),
+        ConfigStatus::Loaded { presets } => ok(
+            checks::CONFIG_FILE,
+            format!("config.toml loaded ({presets} preset(s))"),
+        ),
+        ConfigStatus::Invalid { error } => fail(
+            checks::CONFIG_FILE,
+            format!("config.toml is invalid: {error}"),
+            "fix the syntax (it must start with `schema = 1`), then run \
+             `kanatactl config reload` — its presets and defaults are ignored until then",
+        ),
+    }
 }
 
 /// SPEC §2/§6.5a: each kanata release pins a supported driver version —
