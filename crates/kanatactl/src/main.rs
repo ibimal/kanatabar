@@ -576,6 +576,8 @@ fn print_status(status: &Status) {
     println!("state:          {:?}", status.state);
     if let Some(preset) = &status.active_preset {
         println!("preset:         {preset}");
+    } else if status.passthrough {
+        println!("preset:         (none — passthrough, remapping nothing)");
     }
     if let Some(layer) = &status.active_layer {
         println!("layer:          {layer}");

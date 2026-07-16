@@ -142,6 +142,13 @@ pub async fn fetch_status_once(socket: &Path) -> Result<Status> {
     fetch_status(&mut client).await
 }
 
+/// Fetch the configured presets over a fresh connection, for the wizard's
+/// completion step (offer to import an existing config when none are set).
+pub async fn fetch_presets_once(socket: &Path) -> Result<Vec<PresetInfo>> {
+    let mut client = Client::connect(socket).await?;
+    fetch_presets(&mut client).await
+}
+
 /// Run `doctor` over a fresh connection and return its checks (SPEC §9), for
 /// the tray's "Run Doctor" / Setup Wizard actions (SPEC §11).
 pub async fn fetch_doctor(socket: &Path) -> Result<Vec<DoctorCheck>> {

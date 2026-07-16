@@ -113,14 +113,16 @@ sudo kanatactl install|uninstall
 ✅ vhid daemon        Karabiner VirtualHIDDevice daemon running
 ✅ vhid daemon managed  managed by KanataBar's LaunchDaemon
 ✅ control socket     /var/run/kanatabar.sock (uid 0, mode 660)
-✅ active config      passes kanata --check
+✅ active config      passthrough (no preset active — remapping nothing) passes kanata --check
 ✅ config file        config.toml loaded (2 preset(s))
 ✅ supervisor         state: Running
 ```
 
 ### Presets
 
-The easiest way to add a preset is the CLI — no file editing:
+Until you add a preset, KanataBar runs in **passthrough** — kanata is up and healthy
+but remaps nothing. The first-run wizard finds an existing `~/.config/kanata` config and
+tells you how to turn it into a preset; or add one yourself — no file editing:
 
 ```sh
 kanatactl preset add main ~/.config/kanata/main.kbd --autostart

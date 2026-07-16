@@ -412,10 +412,17 @@ async fn active_config_check(configmgr: &ConfigManager, peer_uid: u32) -> Doctor
         .active_preset()
         .map(|p| format!(" (preset `{p}`)"))
         .unwrap_or_default();
+    let passthrough = configmgr.active_is_passthrough();
     match configmgr.validate(&cfg, peer_uid, None).await {
         Ok(canonical) => ok(
             checks::ACTIVE_CONFIG,
-            format!("{}{preset} passes kanata --check", canonical.display()),
+            if passthrough {
+                // Don't surface the internal safe.kbd path — name what it is.
+                "passthrough (no preset active — remapping nothing) passes kanata --check"
+                    .to_string()
+            } else {
+                format!("{}{preset} passes kanata --check", canonical.display())
+            },
         ),
         Err(err) => fail(
             checks::ACTIVE_CONFIG,

@@ -275,6 +275,12 @@ pub struct Status {
     /// peers parse unchanged (SPEC §7.2 example stays exact).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub degraded_reason: Option<DegradedReason>,
+    /// True when kanata is running the built-in passthrough config (no user
+    /// preset selected — remapping nothing). Lets the UI say "passthrough"
+    /// instead of surfacing the internal `safe.kbd` path. Omitted from the wire
+    /// when false (v1-additive; the §7.2 example stays exact).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub passthrough: bool,
     /// Daemon uptime in seconds.
     pub uptime_s: u64,
     /// Daemon version.
@@ -475,6 +481,7 @@ mod tests {
             driver_ok: Some(true),
             last_error: None,
             degraded_reason: None,
+            passthrough: false,
             uptime_s: 8021,
             daemon_version: "0.3.0".into(),
         }

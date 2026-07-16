@@ -143,6 +143,17 @@ impl ConfigManager {
         self.active.snapshot().preset
     }
 
+    /// True when the running config is the built-in passthrough safe config —
+    /// no user preset, remapping nothing (SPEC §6.4). Used to label it clearly
+    /// instead of surfacing the internal `safe.kbd` path. Note this is a real
+    /// check against the active path, not just "no preset": a bare
+    /// `config apply <custom.kbd>` also has no preset but is *not* passthrough.
+    pub fn active_is_passthrough(&self) -> bool {
+        let active = self.active.spawn_target().kanata_cfg;
+        let safe = &self.paths.safe_kbd;
+        active == *safe || std::fs::canonicalize(&active).ok() == std::fs::canonicalize(safe).ok()
+    }
+
     /// The configured presets, flagged with which one is active (SPEC §7.2).
     pub async fn list_presets(&self) -> Vec<PresetInfo> {
         let active_preset = self.active.snapshot().preset;

@@ -386,3 +386,27 @@ async fn reload_picks_up_hand_edited_presets() {
 
     fx.handle.shutdown().await.unwrap();
 }
+
+/// `active_is_passthrough` is true only when the built-in safe config is
+/// running — not merely when no preset is set (v0.1.2 labeling).
+#[tokio::test]
+async fn passthrough_is_detected_only_for_the_safe_config() {
+    let fx = Fixture::new();
+    // Seed config is a real .kbd, not the safe passthrough.
+    fx.handle.send(Command::Start).await.unwrap();
+    fx.wait_state(S::Running).await;
+    assert!(
+        !fx.manager.active_is_passthrough(),
+        "a real seed config is not passthrough"
+    );
+
+    // Roll back to the built-in safe config → now passthrough.
+    fx.manager.apply_safe_config(fx.uid).await.expect("safe");
+    fx.wait_state(S::Running).await;
+    assert!(
+        fx.manager.active_is_passthrough(),
+        "safe config should read as passthrough"
+    );
+
+    fx.handle.shutdown().await.unwrap();
+}

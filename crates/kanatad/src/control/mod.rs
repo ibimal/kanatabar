@@ -310,6 +310,7 @@ async fn handle_request(
                 supervisor,
                 &conn.health,
                 conn.configmgr.active_preset(),
+                conn.configmgr.active_is_passthrough(),
                 conn.started,
             ),
         ),
@@ -459,6 +460,7 @@ fn build_status(
     supervisor: &SupervisorClient,
     health: &HealthState,
     active_preset: Option<String>,
+    passthrough: bool,
     started: Instant,
 ) -> Status {
     let snapshot = supervisor.snapshot();
@@ -472,6 +474,7 @@ fn build_status(
         driver_ok: health.driver_ok,
         last_error: snapshot.degraded_reason.map(|r| r.describe().to_string()),
         degraded_reason: snapshot.degraded_reason,
+        passthrough,
         uptime_s: started.elapsed().as_secs(),
         daemon_version: env!("CARGO_PKG_VERSION").to_string(),
     }

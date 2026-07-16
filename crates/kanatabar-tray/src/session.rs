@@ -119,6 +119,7 @@ mod tests {
             driver_ok: Some(true),
             last_error: None,
             degraded_reason: None,
+            passthrough: false,
             uptime_s: 1,
             daemon_version: "0.1.0".into(),
         }

@@ -306,15 +306,71 @@ fn run_doctor_action(
                             step.instruction,
                         );
                     }
-                    None => notify(
-                        &notifier,
-                        "KanataBar Setup",
-                        "All checks passed — you're set up.",
-                    ),
+                    None => {
+                        // Setup complete. If no preset is configured yet, help
+                        // the user turn an existing kanata config into one so
+                        // they don't finish onboarding still remapping nothing.
+                        let (title, body) = wizard_completion(&socket).await;
+                        notify(&notifier, &title, &body);
+                    }
                 }
             }
         }
     });
+}
+
+/// The wizard's terminal message. All checks pass; if no preset is configured,
+/// scan `~/.config/kanata` and offer to import an existing config (the seamless
+/// path for an existing kanata user), otherwise show how to add one.
+async fn wizard_completion(socket: &std::path::Path) -> (String, String) {
+    let has_preset = conn::fetch_presets_once(socket)
+        .await
+        .map(|p| !p.is_empty())
+        .unwrap_or(true); // on error, don't nag — assume set up
+    if has_preset {
+        return (
+            "KanataBar Setup".to_string(),
+            "All checks passed — you're set up.".to_string(),
+        );
+    }
+    let found = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .map(|home| existing_kanata_configs(&home))
+        .unwrap_or_default();
+    if let Some(first) = found.first() {
+        let name = first.file_stem().and_then(|s| s.to_str()).unwrap_or("main");
+        (
+            "KanataBar is ready".to_string(),
+            format!(
+                "All checks passed. Found your kanata config — add it as a preset to \
+                 start remapping:\n  kanatactl preset add {name} {}",
+                first.display()
+            ),
+        )
+    } else {
+        (
+            "KanataBar is ready".to_string(),
+            "All checks passed. Add a preset to start remapping:\n  \
+             kanatactl preset add <name> <path/to.kbd>"
+                .to_string(),
+        )
+    }
+}
+
+/// The `.kbd` files in the user's `~/.config/kanata`, sorted. Empty when the
+/// directory is absent. Runs in the tray, as the user (no daemon/root).
+fn existing_kanata_configs(home: &std::path::Path) -> Vec<PathBuf> {
+    let dir = kanatabar_core::kanata::kanata_config_dir(home);
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return Vec::new();
+    };
+    let mut kbds: Vec<PathBuf> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|ext| ext == "kbd"))
+        .collect();
+    kbds.sort();
+    kbds
 }
 
 /// Deliver a notification off the async runtime (osascript blocks).
