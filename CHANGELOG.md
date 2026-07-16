@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-07-16
+
 ### Added
 
 - The first-run wizard, once setup is complete, scans `~/.config/kanata` and —

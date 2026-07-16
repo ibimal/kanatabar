@@ -26,14 +26,13 @@ KanataBar closes those gaps and makes kanata behave like a proper macOS service:
 
 ## Status
 
-`v0.1.0` — first public release; expect some rough edges and please
-[open an issue](https://github.com/ibimal/kanatabar/issues) when you hit one
-(`kanatactl doctor --json` output makes bugs easy to act on). The full feature
-set above is implemented and hardware-verified end-to-end (install → reboot
-persistence → crash revival → hotplug → degraded-state recovery → clean
-uninstall) on macOS 26.5 with kanata 1.12.0. See
-[docs/HW-TESTS.md](docs/HW-TESTS.md) for the complete verification runbook and
-results.
+Early but real — actively developed, and issue reports are very welcome
+([`kanatactl doctor --json`](https://github.com/ibimal/kanatabar/issues) output
+makes bugs easy to act on). The full feature set above is implemented and
+hardware-verified end-to-end (install → reboot persistence → crash revival →
+hotplug → degraded-state recovery → clean uninstall) on macOS 26.5 with kanata
+1.12.0. See [docs/HW-TESTS.md](docs/HW-TESTS.md) for the complete verification
+runbook and results, and [CHANGELOG.md](CHANGELOG.md) for what's new.
 
 ## Requirements
 
@@ -106,7 +105,7 @@ sudo kanatactl install|uninstall
 `kanatactl doctor` on a healthy machine checks, among others:
 
 ```text
-✅ daemon             kanatad 0.1.1 reachable
+✅ daemon             kanatad 0.1.2 reachable
 ✅ kanata binary      /opt/homebrew/bin/kanata (1.12.0)
 ✅ karabiner driver   DriverKit extension activated + enabled
 ✅ driver version     bundle version vs kanata release notes

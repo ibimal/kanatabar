@@ -1008,7 +1008,7 @@ dependencies = [
 
 [[package]]
 name = "kanatabar-core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "proptest",
  "serde",
@@ -1017,7 +1017,7 @@ dependencies = [
 
 [[package]]
 name = "kanatabar-tray"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "block2",
@@ -1038,7 +1038,7 @@ dependencies = [
 
 [[package]]
 name = "kanatactl"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -1051,7 +1051,7 @@ dependencies = [
 
 [[package]]
 name = "kanatad"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -1251,7 +1251,7 @@ dependencies = [
 
 [[package]]
 name = "mock-kanata"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "clap",
 ]
