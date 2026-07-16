@@ -277,11 +277,17 @@ fn run_doctor_action(
 
         match action {
             DoctorAction::Report => {
-                let body = match kanatabar_core::doctor::failed_count(&checks) {
-                    0 => "All checks passed.".to_string(),
-                    n => format!("{n} check(s) failed — run `kanatactl doctor` for details."),
-                };
-                notify(&notifier, "KanataBar Doctor", &body);
+                match kanatabar_core::doctor::format_failures_summary(&checks) {
+                    // All green: a headline is enough.
+                    None => notify(&notifier, "KanataBar Doctor", "All checks passed."),
+                    // Something's wrong: name the failing checks in the banner,
+                    // and open the full report (details + fix hints) — the tray
+                    // has no terminal, so this mirrors `kanatactl doctor`.
+                    Some(summary) => {
+                        open_doctor_report(&kanatabar_core::doctor::format_report(&checks));
+                        notify(&notifier, "KanataBar Doctor", &summary);
+                    }
+                }
             }
             DoctorAction::Wizard => {
                 // The checklist alone can miss runtime-only failures (TCC is
@@ -395,6 +401,18 @@ fn open_in_editor(path: &str) {
         .status()
     {
         tracing::warn!(%err, path, "failed to open config in editor");
+    }
+}
+
+/// Write the full doctor report to a temp file and open it in the default text
+/// viewer — the tray has no terminal, so "Run Doctor" shows the same detail
+/// `kanatactl doctor` prints (SPEC §9). Best-effort; a write/open failure just
+/// leaves the notification summary.
+fn open_doctor_report(report: &str) {
+    let path = std::env::temp_dir().join("kanatabar-doctor.txt");
+    match std::fs::write(&path, report) {
+        Ok(()) => open_in_editor(&path.display().to_string()),
+        Err(err) => tracing::warn!(%err, "could not write doctor report"),
     }
 }
 

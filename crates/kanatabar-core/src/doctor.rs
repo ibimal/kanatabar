@@ -77,6 +77,45 @@ pub fn failed_count(checks: &[DoctorCheck]) -> usize {
     checks.iter().filter(|c| !c.ok).count()
 }
 
+/// Render the full checklist as human-readable text — one `✅/❌ name: detail`
+/// line per check, each failure's `fix_hint` beneath it, and a summary line.
+/// Shared so the CLI (`kanatactl doctor`) and the tray's "Run Doctor" (which
+/// has no terminal, so it opens this as a file) show the identical report.
+pub fn format_report(checks: &[DoctorCheck]) -> String {
+    let mut out = String::new();
+    for check in checks {
+        let mark = if check.ok { "✅" } else { "❌" };
+        out.push_str(&format!("{mark} {}: {}\n", check.name, check.detail));
+        if let Some(hint) = &check.fix_hint {
+            out.push_str(&format!("   ↳ {hint}\n"));
+        }
+    }
+    match failed_count(checks) {
+        0 => out.push_str("\nAll checks passed.\n"),
+        n => out.push_str(&format!("\n{n} check(s) failed.\n")),
+    }
+    out
+}
+
+/// A one-line notification summary naming the failing checks (banner-friendly:
+/// no newlines, which the osascript fallback can't render). `None` when every
+/// check passed. The full detail lives in [`format_report`].
+pub fn format_failures_summary(checks: &[DoctorCheck]) -> Option<String> {
+    let names: Vec<&str> = checks
+        .iter()
+        .filter(|c| !c.ok)
+        .map(|c| c.name.as_str())
+        .collect();
+    if names.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "{} check(s) need attention: {}",
+        names.len(),
+        names.join(", ")
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -95,6 +134,29 @@ mod tests {
         assert!(all_ok(&[check("a", true), check("b", true)]));
         assert!(!all_ok(&[check("a", true), check("b", false)]));
         assert!(all_ok(&[])); // vacuously true
+    }
+
+    #[test]
+    fn format_report_marks_and_hints_each_check() {
+        let report = format_report(&[check("daemon", true), check("driver", false)]);
+        assert!(report.contains("✅ daemon: detail"));
+        assert!(report.contains("❌ driver: detail"));
+        assert!(report.contains("   ↳ fix it")); // failure hint present
+        assert!(report.contains("1 check(s) failed"));
+        // All-green report ends with the pass line, no hints.
+        let green = format_report(&[check("daemon", true)]);
+        assert!(green.contains("All checks passed."));
+        assert!(!green.contains("↳"));
+    }
+
+    #[test]
+    fn failures_summary_names_failures_on_one_line() {
+        assert_eq!(format_failures_summary(&[check("daemon", true)]), None);
+        let summary =
+            format_failures_summary(&[check("daemon", false), check("driver", false)]).unwrap();
+        assert!(summary.contains("2 check(s) need attention"));
+        assert!(summary.contains("daemon, driver"));
+        assert!(!summary.contains('\n'), "banner body must be single-line");
     }
 
     #[test]

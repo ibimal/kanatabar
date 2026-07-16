@@ -565,17 +565,8 @@ fn render_doctor(checks: &[DoctorCheck], json: bool) {
         }
         return;
     }
-    for check in checks {
-        let mark = if check.ok { "✅" } else { "❌" };
-        println!("{mark} {}: {}", check.name, check.detail);
-        if let Some(hint) = &check.fix_hint {
-            println!("   ↳ {hint}");
-        }
-    }
-    match kanatabar_core::doctor::failed_count(checks) {
-        0 => println!("\nAll checks passed."),
-        n => println!("\n{n} check(s) failed."),
-    }
+    // Shared with the tray's "Run Doctor" so both show the identical report.
+    print!("{}", kanatabar_core::doctor::format_report(checks));
 }
 
 fn print_status(status: &Status) {
