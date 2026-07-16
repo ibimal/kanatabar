@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: fmt + clippy + test + deny
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # rustup picks up rust-toolchain.toml automatically; this just triggers the install
+      - name: Install pinned toolchain
+        run: rustup show active-toolchain
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install just and cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-deny
+
+      - name: Check (fmt, clippy, test, deny)
+        run: just check
+
+      - name: Gate 0
+        run: just gate-0
+
+  packaging:
+    name: packaging (gate-10)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pinned toolchain + x86_64 target
+        run: |
+          rustup show active-toolchain
+          rustup target add x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      - name: Gate 10 (universal build, bundle, pkg, tarball, checksums)
+        run: just gate-10

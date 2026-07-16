@@ -1,0 +1,64 @@
+{
+  "checks": [
+    {
+      "detail": "kanatad 0.1.0 reachable, up 1058s",
+      "fix_hint": null,
+      "name": "daemon",
+      "ok": true
+    },
+    {
+      "detail": "/opt/homebrew/bin/kanata (1.12.0)",
+      "fix_hint": null,
+      "name": "kanata binary",
+      "ok": true
+    },
+    {
+      "detail": "Karabiner DriverKit extension activated + enabled",
+      "fix_hint": null,
+      "name": "karabiner driver",
+      "ok": true
+    },
+    {
+      "detail": "driver extension bundle v1.8.0 — note this differs from the pqrs pkg/release version; check your kanata release notes name the pkg you installed",
+      "fix_hint": null,
+      "name": "driver version",
+      "ok": true
+    },
+    {
+      "detail": "Karabiner VirtualHIDDevice daemon running",
+      "fix_hint": null,
+      "name": "vhid daemon",
+      "ok": true
+    },
+    {
+      "detail": "managed by KanataBar's LaunchDaemon",
+      "fix_hint": null,
+      "name": "vhid daemon managed",
+      "ok": true
+    },
+    {
+      "detail": "cannot be verified automatically (TCC is unreadable by design); a denial is detected at kanata startup and reported as Degraded",
+      "fix_hint": "grant BOTH Input Monitoring AND Accessibility to /usr/local/bin/kanatad in System Settings → Privacy & Security (+ button, Cmd+Shift+G to type the path) — macOS attributes kanata's device access to the supervising daemon, and kanata's own self-registered entry is NOT the one checked. After updating KanataBar, remove (−) and re-add (+) both entries (kanata updates don't affect them)",
+      "name": "input monitoring",
+      "ok": true
+    },
+    {
+      "detail": "/var/run/kanatabar.sock (uid 0, mode 660)",
+      "fix_hint": null,
+      "name": "control socket",
+      "ok": true
+    },
+    {
+      "detail": "/Library/Application Support/KanataBar/safe.kbd passes kanata --check",
+      "fix_hint": null,
+      "name": "active config",
+      "ok": true
+    },
+    {
+      "detail": "state: Running",
+      "fix_hint": null,
+      "name": "supervisor",
+      "ok": true
+    }
+  ]
+}

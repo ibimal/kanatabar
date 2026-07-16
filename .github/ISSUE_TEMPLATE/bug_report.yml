@@ -1,0 +1,36 @@
+name: Bug report
+description: Something misbehaves — a crash, a wrong state, a check that lies
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: "`kanatactl doctor --json` output"
+      description: >
+        This is designed as a bug-report bundle — it contains check results and
+        versions, never key data or config contents. If the daemon is down and doctor
+        can't run, paste whatever it prints anyway.
+      render: json
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions (if doctor couldn't report them)
+      placeholder: "macOS 26.5 · kanata 1.12.0 · Karabiner driver pkg v6.2.0"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: >
+        `kanatactl logs -n 100` around the failure, or
+        `/Library/Logs/KanataBar/*.log`. Please skim for anything personal first —
+        KanataBar never logs keystrokes or .kbd contents, but paths can be personal.
+      render: text

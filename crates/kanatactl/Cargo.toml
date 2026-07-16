@@ -1,0 +1,29 @@
+[package]
+name = "kanatactl"
+description = "KanataBar CLI: socket client with full tray parity."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+name = "kanatactl"
+path = "src/lib.rs"
+
+[[bin]]
+name = "kanatactl"
+path = "src/main.rs"
+
+[dependencies]
+kanatabar-core = { workspace = true }
+anyhow = { workspace = true }
+clap = { workspace = true }
+nix = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+tempfile = { workspace = true }

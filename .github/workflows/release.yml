@@ -1,0 +1,94 @@
+name: Release
+
+# SPEC §12/§13: tag v<version> → build universal artifacts, publish a GitHub
+# Release (pkg + tarball + SHA256SUMS, notes from CHANGELOG.md), and bump the
+# Homebrew tap. No Developer ID, no notarization — ad-hoc signatures only.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pinned toolchain + x86_64 target
+        run: |
+          rustup show active-toolchain
+          rustup target add x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install just and cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-deny
+
+      - name: Tag must match the workspace version
+        run: |
+          version=$(./packaging/version.sh)
+          tag="${GITHUB_REF_NAME#v}"
+          if [[ "$tag" != "$version" ]]; then
+            echo "tag v$tag != Cargo.toml version $version" >&2
+            exit 1
+          fi
+
+      - name: Gate 10 (builds and verifies every artifact)
+        run: just gate-10
+
+      - name: Extract release notes from CHANGELOG.md
+        run: |
+          version=$(./packaging/version.sh)
+          awk -v ver="$version" '
+            $0 ~ "^## \\[" ver "\\]" {on=1; next}
+            on && /^## \[/ {exit}
+            on {print}
+          ' CHANGELOG.md > dist/RELEASE_NOTES.md
+          if [[ ! -s dist/RELEASE_NOTES.md ]]; then
+            echo "No CHANGELOG.md section for $version" > dist/RELEASE_NOTES.md
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: dist/RELEASE_NOTES.md
+          files: |
+            dist/KanataBar-*.pkg
+            dist/kanatabar-*-macos-universal.tar.gz
+            dist/SHA256SUMS
+
+      # SPEC rule 7: the tap token is a secret from the environment; when it
+      # is absent this step becomes a no-op that prints instructions.
+      - name: Bump Homebrew tap
+        env:
+          TAP_PUSH_TOKEN: ${{ secrets.TAP_PUSH_TOKEN }}
+        run: |
+          version=$(./packaging/version.sh)
+          sha256=$(shasum -a 256 "dist/KanataBar-$version.pkg" | cut -d' ' -f1)
+          if [[ -z "$TAP_PUSH_TOKEN" ]]; then
+            cat <<EOF
+          TAP_PUSH_TOKEN is not set — skipping the tap bump. To publish manually:
+            1. Create/clone github.com/ibimal/homebrew-tap
+            2. Render packaging/homebrew/kanatabar.rb with:
+                 version = $version
+                 sha256  = $sha256
+               into Casks/kanatabar.rb and push.
+            To automate: add a fine-grained PAT with push access to
+            ibimal/homebrew-tap as the TAP_PUSH_TOKEN repository secret.
+          EOF
+            exit 0
+          fi
+          git clone "https://x-access-token:${TAP_PUSH_TOKEN}@github.com/ibimal/homebrew-tap.git" tap
+          mkdir -p tap/Casks
+          sed -e "s/__VERSION__/$version/g" -e "s/__SHA256__/$sha256/g" \
+              packaging/homebrew/kanatabar.rb > tap/Casks/kanatabar.rb
+          cd tap
+          git config user.name "kanatabar-release"
+          git config user.email "13629614+ibimal@users.noreply.github.com"
+          git add Casks/kanatabar.rb
+          git commit -m "kanatabar $version"
+          git push

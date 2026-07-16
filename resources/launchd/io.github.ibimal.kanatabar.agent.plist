@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>io.github.ibimal.kanatabar.agent</string>
+  <key>ProgramArguments</key><array>
+    <string>__TRAY_BIN__</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ProcessType</key><string>Interactive</string>
+  <key>AssociatedBundleIdentifiers</key><string>io.github.ibimal.kanatabar</string>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/KanataBar/tray.out.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/KanataBar/tray.err.log</string>
+</dict></plist>

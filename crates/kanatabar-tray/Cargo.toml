@@ -1,0 +1,41 @@
+[package]
+name = "kanatabar-tray"
+description = "KanataBar menu-bar app."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+# The UI-toolkit-free client logic lives in the library so it can be
+# unit-tested without a display (SPEC §19, the gate's [AUTO] half). The binary
+# is the thin GUI shell that drives it (exercised only by the [HW] checklist).
+[lib]
+name = "kanatabar_tray"
+path = "src/lib.rs"
+
+[[bin]]
+name = "kanatabar-tray"
+path = "src/main.rs"
+
+# `muda` (SPEC §4) is used via tray-icon's own re-export (`tray_icon::menu`)
+# so the tray and its menu share one muda instance; no direct dep is needed.
+[dependencies]
+kanatabar-core = { workspace = true }
+kanatactl = { workspace = true }
+anyhow = { workspace = true }
+block2 = { workspace = true }
+nix = { workspace = true }
+objc2 = { workspace = true }
+objc2-foundation = { workspace = true }
+objc2-user-notifications = { workspace = true }
+png = { workspace = true }
+tao = { workspace = true }
+tokio = { workspace = true }
+tray-icon = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>io.github.ibimal.kanatabar.vhidd</string>
+  <!-- SPEC §6.5a: keep the Karabiner VirtualHIDDevice daemon alive across
+       reboots when nothing else (Karabiner-Elements, a user plist) does.
+       ProcessType Interactive per pqrs-org: the daemon needs high
+       responsiveness. Installed/removed only by `kanatactl install/uninstall`,
+       and only when unmanaged — never alongside another supervisor. -->
+  <key>ProgramArguments</key><array>
+    <string>/Library/Application Support/org.pqrs/Karabiner-DriverKit-VirtualHIDDevice/Applications/Karabiner-VirtualHIDDevice-Daemon.app/Contents/MacOS/Karabiner-VirtualHIDDevice-Daemon</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ProcessType</key><string>Interactive</string>
+  <key>AssociatedBundleIdentifiers</key><string>io.github.ibimal.kanatabar</string>
+  <key>StandardOutPath</key><string>/Library/Logs/KanataBar/vhidd.out.log</string>
+  <key>StandardErrorPath</key><string>/Library/Logs/KanataBar/vhidd.err.log</string>
+</dict></plist>
