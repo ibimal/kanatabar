@@ -241,7 +241,11 @@ async fn preset(client: &mut Client, cmd: PresetCmd) -> u8 {
             Ok(response) => match response.payload {
                 ResponsePayload::Presets { presets } => {
                     if presets.is_empty() {
-                        println!("(no presets configured — see config.toml, SPEC §7.3)");
+                        println!("No presets configured.");
+                        suggest_existing_configs();
+                        println!(
+                            "Add one with: kanatactl preset add <name> <path/to.kbd> [--autostart]"
+                        );
                         return EXIT_OK;
                     }
                     for preset in presets {
@@ -297,6 +301,34 @@ async fn preset(client: &mut Client, cmd: PresetCmd) -> u8 {
             )
             .await
         }
+    }
+}
+
+/// When no presets are configured, scan the user's `~/.config/kanata` for
+/// existing `.kbd` files and name them, so a kanata user who already has a
+/// config learns how to turn it into a preset instead of starting blank
+/// (v0.1.1 onboarding). Runs in the CLI, as the user — no daemon or root.
+fn suggest_existing_configs() {
+    let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
+        return;
+    };
+    let dir = kanatabar_core::kanata::kanata_config_dir(&home);
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return;
+    };
+    let mut kbds: Vec<PathBuf> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|ext| ext == "kbd"))
+        .collect();
+    kbds.sort();
+    if kbds.is_empty() {
+        return;
+    }
+    println!("Found existing kanata config(s) in {}:", dir.display());
+    for kbd in &kbds {
+        let name = kbd.file_stem().and_then(|s| s.to_str()).unwrap_or("main");
+        println!("  kanatactl preset add {name} {}", kbd.display());
     }
 }
 

@@ -204,10 +204,13 @@ fn logs_devices_config_and_presets_round_trip() {
     let (code, _) = ctl(&socket, &["config", "validate", broken.to_str().unwrap()]);
     assert_eq!(code, 1, "a broken config must be an operational error");
 
-    // preset list: none configured → the hint, exit 0.
+    // preset list: none configured → the guided empty-state, exit 0. (The
+    // suggestion tail depends on the tester's ~/.config/kanata, so assert only
+    // the stable header + the add-command hint.)
     let (code, stdout) = ctl(&socket, &["preset", "list"]);
     assert_eq!(code, 0);
-    assert!(stdout.contains("no presets configured"), "{stdout}");
+    assert!(stdout.contains("No presets configured."), "{stdout}");
+    assert!(stdout.contains("kanatactl preset add"), "{stdout}");
 
     // autostart with no active preset → operational error, exit 1.
     let (code, _) = ctl(&socket, &["autostart", "on"]);

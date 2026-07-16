@@ -91,6 +91,14 @@ pub fn alt_kanata_locations(home: &std::path::Path) -> Vec<std::path::PathBuf> {
     ]
 }
 
+/// kanata's conventional per-user config directory, `~/.config/kanata`, where
+/// existing kanata users keep their `.kbd` files. KanataBar doesn't read from
+/// here itself (presets point wherever the user likes) but scans it to help a
+/// new user turn an existing config into a preset. Pure (no I/O).
+pub fn kanata_config_dir(home: &std::path::Path) -> std::path::PathBuf {
+    home.join(".config/kanata")
+}
+
 /// A fault recognizable in kanata's output (SPEC §2, §6.5): conditions a
 /// respawn cannot fix, so the supervisor should go `Degraded` with the right
 /// hint instead of burning the retry budget.
@@ -230,6 +238,14 @@ mod tests {
         for alt in &alts {
             assert!(!KANATA_BIN_CANDIDATES.contains(&alt.to_str().unwrap()));
         }
+    }
+
+    #[test]
+    fn kanata_config_dir_is_the_xdg_convention() {
+        assert_eq!(
+            kanata_config_dir(std::path::Path::new("/Users/alice")),
+            std::path::PathBuf::from("/Users/alice/.config/kanata")
+        );
     }
 
     #[test]
