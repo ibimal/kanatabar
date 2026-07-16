@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The first-run wizard, once setup is complete, scans `~/.config/kanata` and —
+  if no preset is configured — offers the exact `preset add` command for an
+  existing config, so onboarding ends ready to remap.
+
+### Changed
+
+- Passthrough (no preset selected) is now labelled as such in `status` and
+  `doctor` instead of surfacing the internal `safe.kbd` path. New additive
+  `Status.passthrough` field.
+
 ## [0.1.1] - 2026-07-16
 
 First-release UX fixes from early-user feedback: the daemon no longer fails
