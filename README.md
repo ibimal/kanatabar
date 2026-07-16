@@ -95,8 +95,8 @@ The CLI has full parity:
 kanatactl status [--json]   daemon + kanata state, active preset and layer
 kanatactl start|stop|restart|pause|resume
 kanatactl watch             stream state-change events
-kanatactl preset list|switch <name>
-kanatactl config validate|apply <file.kbd>
+kanatactl preset list|switch|add|remove   manage presets (no hand-editing config.toml)
+kanatactl config validate|apply|reload    check/apply a .kbd; reload config.toml
 kanatactl logs [-f]         the daemon's buffered log
 kanatactl devices           input devices the daemon can see
 kanatactl doctor [--json]   preflight checklist; --json doubles as a bug-report bundle
@@ -106,7 +106,7 @@ sudo kanatactl install|uninstall
 `kanatactl doctor` on a healthy machine checks, among others:
 
 ```text
-✅ daemon             kanatad 0.1.0 reachable
+✅ daemon             kanatad 0.1.1 reachable
 ✅ kanata binary      /opt/homebrew/bin/kanata (1.12.0)
 ✅ karabiner driver   DriverKit extension activated + enabled
 ✅ driver version     bundle version vs kanata release notes
@@ -114,12 +114,26 @@ sudo kanatactl install|uninstall
 ✅ vhid daemon managed  managed by KanataBar's LaunchDaemon
 ✅ control socket     /var/run/kanatabar.sock (uid 0, mode 660)
 ✅ active config      passes kanata --check
+✅ config file        config.toml loaded (2 preset(s))
 ✅ supervisor         state: Running
 ```
 
 ### Presets
 
-Presets live in `/Library/Application Support/KanataBar/config.toml`:
+The easiest way to add a preset is the CLI — no file editing:
+
+```sh
+kanatactl preset add main ~/.config/kanata/main.kbd --autostart
+kanatactl preset add gaming ~/.config/kanata/gaming.kbd
+kanatactl preset list       # already have configs? this suggests them
+```
+
+Switching presets (menu or `kanatactl preset switch gaming`) validates the `.kbd` first
+and keeps the previous working config as a rollback target.
+
+Presets are stored in `/Library/Application Support/KanataBar/config.toml`. You can also
+edit it by hand and run `kanatactl config reload` to pick up the changes (a broken edit
+is reported by `kanatactl doctor`, never silently ignored):
 
 ```toml
 schema = 1
@@ -131,9 +145,6 @@ autostart = true
 [presets.gaming]
 config = "/Users/alice/.config/kanata/gaming.kbd"
 ```
-
-Switching presets (menu or `kanatactl preset switch gaming`) validates the `.kbd` first
-and keeps the previous working config as a rollback target.
 
 ## How it works
 

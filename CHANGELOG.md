@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-07-16
+
+First-release UX fixes from early-user feedback: the daemon no longer fails
+silently, and managing presets and kanata no longer requires hand-editing files.
+
+### Added
+
+- `kanatactl preset add <name> <path.kbd> [--autostart]` and `preset remove
+  <name>` — manage presets without hand-editing `config.toml`; populates the
+  previously-empty tray Presets menu. Adding refuses a nonexistent `.kbd`.
+- `kanatactl config reload` — re-read `config.toml` so hand edits to presets
+  take effect without restarting the daemon (`[defaults]` still need a restart).
+- `doctor` gains a `config file` check that **fails** on a present-but-broken
+  `config.toml`, naming the parse error and the fix.
+- Empty `preset list` scans `~/.config/kanata` and prints the exact `preset
+  add` command for each existing `.kbd`, so an existing kanata config is
+  copy-paste to import.
+
+### Fixed
+
+- A broken `config.toml` is no longer silently discarded (which left presets
+  mysteriously empty). It is logged at ERROR and surfaced by `doctor`; the
+  daemon still runs on defaults so a typo can't take the keyboard down.
+- kanata installed via `cargo install` (`~/.cargo/bin`) or MacPorts
+  (`/opt/local/bin`) is now detected: `doctor` names the location and the exact
+  `kanata_bin` line to set, instead of an unhelpful "not found". (The daemon
+  still never auto-runs a user-writable path as root — the user opts in.)
+
 ## [0.1.0] - 2026-07-16
 
 Initial public release. Hardware-verified end-to-end on macOS 26.5 with kanata 1.12.0
