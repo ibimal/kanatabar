@@ -9,7 +9,7 @@ cask "kanatabar" do
   desc "Supervisor and menu bar app for the kanata keyboard remapper"
   homepage "https://github.com/ibimal/kanatabar"
 
-  depends_on macos: ">= :ventura"
+  depends_on macos: :ventura
 
   pkg "KanataBar-#{version}.pkg"
 
