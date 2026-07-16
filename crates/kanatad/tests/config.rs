@@ -46,6 +46,7 @@ const BROKEN: &str = "BROKEN\n";
 struct Fixture {
     handle: SupervisorHandle,
     manager: ConfigManager,
+    events: kanatad::events::DaemonEvents,
     dir: tempfile::TempDir,
     uid: u32,
 }
@@ -62,6 +63,7 @@ impl Fixture {
         config.kill_grace = Duration::from_secs(2);
         let preflight_timeout = config.preflight_timeout;
 
+        let events = kanatad::events::DaemonEvents::default();
         let handle = supervisor::start(config);
         let manager = ConfigManager::load(
             handle.client(),
@@ -69,11 +71,12 @@ impl Fixture {
             ConfigPaths::under(dir.path()),
             mock_bin(),
             preflight_timeout,
-            kanatad::events::DaemonEvents::default(),
+            events.clone(),
         );
         Self {
             handle,
             manager,
+            events,
             dir,
             uid: nix::unistd::geteuid().as_raw(),
         }
@@ -406,6 +409,30 @@ async fn passthrough_is_detected_only_for_the_safe_config() {
     assert!(
         fx.manager.active_is_passthrough(),
         "safe config should read as passthrough"
+    );
+
+    fx.handle.shutdown().await.unwrap();
+}
+
+/// Preset mutations publish `PresetsChanged` so the tray refreshes its Presets
+/// menu live (the v0.1.2 bug: add worked but the menu stayed disabled).
+#[tokio::test]
+async fn preset_mutations_publish_presets_changed() {
+    use kanatabar_core::ipc::Event;
+    let fx = Fixture::new();
+    let mut rx = fx.events.subscribe();
+    let kbd = fx.write("m.kbd", GOOD).display().to_string();
+
+    fx.manager.add_preset("m", &kbd, false).await.expect("add");
+    assert!(
+        matches!(rx.try_recv(), Ok(Event::PresetsChanged)),
+        "add_preset must publish PresetsChanged"
+    );
+
+    fx.manager.remove_preset("m").await.expect("remove");
+    assert!(
+        matches!(rx.try_recv(), Ok(Event::PresetsChanged)),
+        "remove_preset must publish PresetsChanged"
     );
 
     fx.handle.shutdown().await.unwrap();

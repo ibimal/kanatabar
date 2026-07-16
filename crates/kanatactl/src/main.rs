@@ -241,11 +241,8 @@ async fn preset(client: &mut Client, cmd: PresetCmd) -> u8 {
             Ok(response) => match response.payload {
                 ResponsePayload::Presets { presets } => {
                     if presets.is_empty() {
-                        println!("No presets configured.");
+                        println!("No presets configured — KanataBar is passing keys through.");
                         suggest_existing_configs();
-                        println!(
-                            "Add one with: kanatactl preset add <name> <path/to.kbd> [--autostart]"
-                        );
                         return EXIT_OK;
                     }
                     for preset in presets {
@@ -309,25 +306,34 @@ async fn preset(client: &mut Client, cmd: PresetCmd) -> u8 {
 /// config learns how to turn it into a preset instead of starting blank
 /// (v0.1.1 onboarding). Runs in the CLI, as the user — no daemon or root.
 fn suggest_existing_configs() {
-    let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
-        return;
-    };
-    let dir = kanatabar_core::kanata::kanata_config_dir(&home);
-    let Ok(entries) = std::fs::read_dir(&dir) else {
-        return;
-    };
-    let mut kbds: Vec<PathBuf> = entries
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| p.extension().is_some_and(|ext| ext == "kbd"))
-        .collect();
-    kbds.sort();
+    let kbds = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .map(|home| {
+            let dir = kanatabar_core::kanata::kanata_config_dir(&home);
+            let mut kbds: Vec<PathBuf> = std::fs::read_dir(&dir)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .map(|e| e.path())
+                .filter(|p| p.extension().is_some_and(|ext| ext == "kbd"))
+                .collect();
+            kbds.sort();
+            kbds
+        })
+        .unwrap_or_default();
+
     if kbds.is_empty() {
+        println!("Add a preset to start remapping:");
+        println!("  kanatactl preset add <name> <path/to.kbd> [--autostart]");
         return;
     }
-    println!("Found existing kanata config(s) in {}:", dir.display());
+
+    println!("Found a kanata config — add it as a preset to start remapping:");
     for kbd in &kbds {
-        let name = kbd.file_stem().and_then(|s| s.to_str()).unwrap_or("main");
+        // A file literally named `config.kbd` makes a poor preset name; fall
+        // back to `main` so the suggested command reads naturally.
+        let stem = kbd.file_stem().and_then(|s| s.to_str()).unwrap_or("main");
+        let name = if stem == "config" { "main" } else { stem };
         println!("  kanatactl preset add {name} {}", kbd.display());
     }
 }

@@ -209,7 +209,7 @@ fn logs_devices_config_and_presets_round_trip() {
     // the stable header + the add-command hint.)
     let (code, stdout) = ctl(&socket, &["preset", "list"]);
     assert_eq!(code, 0);
-    assert!(stdout.contains("No presets configured."), "{stdout}");
+    assert!(stdout.contains("No presets configured"), "{stdout}");
     assert!(stdout.contains("kanatactl preset add"), "{stdout}");
 
     // autostart with no active preset → operational error, exit 1.

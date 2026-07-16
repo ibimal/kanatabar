@@ -91,6 +91,9 @@ impl Session {
             // model on their own — a StateChanged follows a crash, and the
             // devices submenu is fetched on demand (SPEC §8).
             Event::DeviceChanged { .. } | Event::Crash { .. } => {}
+            // The preset list is refreshed by the connection loop (which has
+            // the client to re-fetch); nothing to do against status here.
+            Event::PresetsChanged => {}
         }
     }
 

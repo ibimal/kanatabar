@@ -237,7 +237,10 @@ impl ConfigManager {
         let mut file = self.file.lock().await;
         file.presets = presets;
         write_config_file(&self.paths.config_toml, &file)
-            .map_err(|err| ConfigError::Internal(format!("writing config.toml: {err}")))
+            .map_err(|err| ConfigError::Internal(format!("writing config.toml: {err}")))?;
+        drop(file);
+        self.events.publish(Event::PresetsChanged);
+        Ok(())
     }
 
     /// Add or update one preset (`kanatactl preset add`), preserving every
@@ -282,6 +285,8 @@ impl ConfigManager {
         *self.status.lock().await = ConfigStatus::Loaded {
             presets: file.presets.len(),
         };
+        drop(file);
+        self.events.publish(Event::PresetsChanged);
         info!(preset = %name, config, autostart, "preset added");
         Ok(())
     }
@@ -301,6 +306,8 @@ impl ConfigManager {
         *self.status.lock().await = ConfigStatus::Loaded {
             presets: file.presets.len(),
         };
+        drop(file);
+        self.events.publish(Event::PresetsChanged);
         info!(preset = %name, "preset removed");
         Ok(())
     }
@@ -313,11 +320,18 @@ impl ConfigManager {
     /// restart — only the preset list is hot-reloaded.
     pub async fn reload(&self) -> ConfigStatus {
         let (parsed, status) = load_with_status(&self.paths.config_toml);
+        let mut changed = false;
         if !status.is_invalid() {
             let mut file = self.file.lock().await;
-            file.presets = parsed.presets;
+            if file.presets != parsed.presets {
+                file.presets = parsed.presets;
+                changed = true;
+            }
         }
         *self.status.lock().await = status.clone();
+        if changed {
+            self.events.publish(Event::PresetsChanged);
+        }
         status
     }
 

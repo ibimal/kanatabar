@@ -371,6 +371,11 @@ pub enum Event {
         /// Path that was applied.
         path: String,
     },
+    /// The configured preset list changed (add/remove/reload/set). A signal to
+    /// re-fetch presets — no payload, so it stays cheap and the client always
+    /// reads the authoritative list. Lets the tray's Presets menu update
+    /// without a reconnect (SPEC §8).
+    PresetsChanged,
 }
 
 /// Negotiate a protocol version: the daemon speaks exactly
@@ -468,6 +473,7 @@ mod tests {
                 preset: Some("main".into()),
                 path: "/main.kbd".into(),
             },
+            Event::PresetsChanged,
         ]
     }
 

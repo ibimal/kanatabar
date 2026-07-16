@@ -94,6 +94,12 @@ async fn stream_connection(mut client: Client, updates: &UnboundedSender<Update>
             // A closed UI channel means we're shutting down.
             updates.send(Update::Notify { title, body })?;
         }
+        // The preset list isn't carried in events; a change is a signal to
+        // re-read the authoritative list so the Presets menu updates live
+        // (e.g. after `kanatactl preset add`) without a reconnect.
+        if matches!(event, kanatabar_core::ipc::Event::PresetsChanged) {
+            session.set_presets(fetch_presets(&mut client).await?);
+        }
         session.apply_event(&event);
         send_model(&session, updates)?;
     }
