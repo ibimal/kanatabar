@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-07-16
+
+### Added
+
+- The tray's **Run Doctor** now opens the full report (all checks, details, and
+  fix hints) in the default text viewer and names the failing checks in the
+  notification — mirroring `kanatactl doctor` instead of a bare failure count.
+
+### Fixed
+
+- The tray **Presets** menu stayed disabled after `kanatactl preset add` until a
+  reconnect. Preset changes now emit a `PresetsChanged` event and the tray
+  refreshes the list live.
+- Cleaned up the empty `preset list` guidance (removed a redundant line; a
+  `config.kbd` now suggests the preset name `main`).
+
 ## [0.1.2] - 2026-07-16
 
 ### Added

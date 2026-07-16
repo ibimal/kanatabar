@@ -105,7 +105,7 @@ sudo kanatactl install|uninstall
 `kanatactl doctor` on a healthy machine checks, among others:
 
 ```text
-✅ daemon             kanatad 0.1.2 reachable
+✅ daemon             kanatad 0.1.3 reachable
 ✅ kanata binary      /opt/homebrew/bin/kanata (1.12.0)
 ✅ karabiner driver   DriverKit extension activated + enabled
 ✅ driver version     bundle version vs kanata release notes
