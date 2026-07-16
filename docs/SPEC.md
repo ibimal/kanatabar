@@ -375,7 +375,8 @@ config = "/Users/alice/.config/kanata/gaming.kbd"
 - Connects, `Hello` + `Subscribe`, renders state; exponential reconnect when the daemon bounces.
 - **Menu:** state line + active layer (disabled items) · Start/Stop/Restart · Pause/Resume ·
   Presets submenu (checkmark) · Edit Config (opens in default editor) · Validate Config ·
-  Devices (list + which are matched) · View Logs · Setup Wizard… ·
+  Devices (list + which are matched) · View Logs · Setup Assistant… (demoted once setup is
+  complete, §11.1) · Health Check… (the doctor window, §11.3) ·
   Launch at Login (agent toggle) · Quit KanataBar (tray only; daemon keeps running — say so).
   **No "Check for Updates" item** — updates are `brew upgrade` (§13), matching AeroSpace/
   kanata-tray precedent for un-notarized OSS menu-bar apps.
@@ -442,7 +443,40 @@ Daemon plist (template; agent analogous in `gui/<uid>` domain):
 
 ---
 
-## 11. First-run wizard (in tray; every step re-checkable)
+## 11. Setup wizard & doctor (one check engine, two intents)
+
+Checks are implemented **once** (names in `kanatabar-core::doctor`, execution in the daemon;
+the Phase 8 [AUTO] gate pins the JSON schema) and rendered by two deliberately different
+products:
+
+- **Wizard** — ordered, stateful, goal-driven, self-dismissing. Goal: fresh machine → running
+  kanata. Shows only the *next* unmet step and hides everything else. The first-run experience.
+- **Doctor** — unordered, stateless, exhaustive, always available. Goal: "why is it broken
+  *now*?" on an already-set-up machine. Shows *every* check and hides nothing; never auto-opens.
+  `kanatactl doctor` (§9) stays report-only: diagnose and hint, never mutate (brew/flutter
+  `doctor` precedent).
+
+[HARD] Anti-overlap rule: the doctor never implements onboarding flows — a setup-class failure
+deep-links into the wizard at the failing step (invert the wizard's step→check `verifies`
+mapping). The wizard never renders the full checklist — its terminal step hands off to doctor.
+
+Precedents: Karabiner-Elements (first-launch window, live-polling checkmarks); LuLu & OBS
+(linear first-run wizard, re-runnable from a menu); Docker Desktop (flat "Troubleshoot" panel
+with per-item actions + one-click diagnostics bundle).
+
+### 11.1 Check classes
+
+- **Setup-class** (the wizard owns the fix): driver present · driver version · karabiner
+  driver (activated) · vhid daemon managed · input monitoring · daemon (installed).
+- **Runtime-class** (doctor-only): kanata binary · vhid daemon (running) · control socket ·
+  active config · config file · supervisor.
+
+The classification lives beside the check names in `kanatabar-core::doctor` (single source,
+like `ALL_CHECKS`). **Setup is complete** ⇔ every setup-class check passes.
+
+### 11.2 Wizard (window; every step re-checkable)
+
+Steps (unchanged):
 
 1. Detect/install **Karabiner-DriverKit-VirtualHIDDevice** pkg — link to the version the
    installed kanata supports (§2 version coupling), not blindly the latest; detect version.
@@ -457,7 +491,38 @@ Daemon plist (template; agent analogous in `gui/<uid>` domain):
 4. Input Monitoring grant if required → open pane, verify.
 5. Install daemon (admin prompt) → 6. Install agent → 7. Run `doctor`, show green checklist.
 
-Wizard = UI over the same checks `kanatactl doctor` runs (single implementation in core/daemon).
+Window behavior (Phase 12):
+
+- **Auto-opens** when the tray starts and setup is incomplete (§11.1); never auto-opens once
+  setup is complete. Stays reachable from the menu as "Setup Assistant…" for re-runs
+  (OBS pattern).
+- One window: all steps as a vertical checklist; the first unsatisfied step expanded with its
+  instruction and action buttons — "Do it for me" (runs the step's `run` argv, e.g. driver
+  activation) and "Open System Settings" (the step's pane).
+- **Live re-check**: while the window is open, re-run doctor on a short poll (~2 s) so steps
+  flip green as the user approves things in System Settings — no "re-check" button
+  (Karabiner-Elements pattern).
+- A supervisor degradation overrides a green checklist (HW Run 9): `DegradedReason` maps back
+  onto its check, and the wizard trusts the daemon over the static checks.
+- [HARD] Steps needing sudo (`kanatactl install`) are shown as copyable commands; the tray
+  never elevates and never runs them itself.
+
+### 11.3 Doctor window ("Health Check…", Phase 12)
+
+- Flat list of **all** checks with ✅/❌, detail, and fix hint visible — replaces the temp-file
+  report the tray opens today.
+- Per-check fix affordances, three tiers:
+  1. Safe, idempotent, in-process → a real button (activate driver, re-validate config, open
+     the relevant Settings pane).
+  2. Setup-class failure → "Open Setup Assistant at this step" (delegation; §11 [HARD] rule).
+  3. Needs sudo → copyable command only (§11.2 rule applies).
+- **Copy report** button: `doctor --json` to the clipboard — the §9 bug-report bundle in one
+  click (Docker diagnostics-bundle pattern).
+- Degraded-state notifications/banners (§8) are unchanged; the window is pull, not push.
+
+Until Phase 12 lands, the tray keeps the v0.1.x interim behavior: "Setup Wizard…" runs doctor
+and opens the pane for the first failing step; "Run Doctor" notifies a summary and opens the
+text report.
 
 ---
 
@@ -605,6 +670,7 @@ Each phase: implement → `just check` → `just gate-N` → commit → update P
 | 9 | Dependency hardening: VHID-daemon management (§6.5a — detect/install/health-check our vhidd LaunchDaemon), driver-version-vs-kanata `doctor` check, wizard step | [AUTO] detection/plist logic + doctor checks against fixtures; [HW] reboot → kanata alive with no Karabiner-Elements installed |
 | 10 | Release (§12/§13): bundle, universal build, ad-hoc sign, pkg + tarball, GitHub Release + Homebrew tap, release workflow | [AUTO] packaging scripts run cleanly in CI; [HW] brew-install on a clean Mac → wizard → working remap; `brew upgrade` replaces both binaries and the daemon comes back |
 | 11 | *(Optional)* SMAppService registration path | design doc first, then implement |
+| 12 | Wizard & doctor windows (§11.2–§11.3). UI-layer design doc first (the tray has no windowing today — evaluate a minimal native window vs `egui`/`winit` against §4 constraints), then the doctor window (smaller lift: static list + buttons, replaces the temp-file report), then the live-rechecking wizard window with first-run auto-open | [AUTO] check-classification + step↔check mapping-inversion tests; doctor JSON schema still stable. [HW] clean-machine onboarding driven by the wizard window alone; doctor-window visual checklist incl. delegation into the wizard |
 
 ---
 
