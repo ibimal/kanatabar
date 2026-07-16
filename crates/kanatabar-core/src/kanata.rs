@@ -75,6 +75,22 @@ fn parse_u32(part: Option<&str>) -> Option<u32> {
 /// Monitoring grant (SPEC §2) — is stable across restarts.
 pub const KANATA_BIN_CANDIDATES: [&str; 2] = ["/usr/local/bin/kanata", "/opt/homebrew/bin/kanata"];
 
+/// kanata locations that are **not** auto-trusted for root execution but are
+/// common enough to name in diagnostics: `cargo install kanata` lands in
+/// `~/.cargo/bin` and MacPorts in `/opt/local/bin`. The daemon probes these
+/// only to turn an unhelpful "not found" into "found at X — point KanataBar at
+/// it" guidance; it never *runs* them without an explicit `kanata_bin` in
+/// config.toml, because executing a user-writable path as root would break the
+/// §14 invariant (the user setting `kanata_bin` is their informed opt-in).
+///
+/// Pure (no I/O): returns the candidate paths for `home`; the caller probes.
+pub fn alt_kanata_locations(home: &std::path::Path) -> Vec<std::path::PathBuf> {
+    vec![
+        home.join(".cargo/bin/kanata"),
+        std::path::PathBuf::from("/opt/local/bin/kanata"),
+    ]
+}
+
 /// A fault recognizable in kanata's output (SPEC §2, §6.5): conditions a
 /// respawn cannot fix, so the supervisor should go `Degraded` with the right
 /// hint instead of burning the retry budget.
@@ -204,6 +220,17 @@ pub fn parse_layer_change(line: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn alt_locations_include_cargo_and_macports() {
+        let alts = alt_kanata_locations(std::path::Path::new("/Users/alice"));
+        assert!(alts.contains(&std::path::PathBuf::from("/Users/alice/.cargo/bin/kanata")));
+        assert!(alts.contains(&std::path::PathBuf::from("/opt/local/bin/kanata")));
+        // Never overlaps the auto-trusted allowlist (those are handled first).
+        for alt in &alts {
+            assert!(!KANATA_BIN_CANDIDATES.contains(&alt.to_str().unwrap()));
+        }
+    }
 
     #[test]
     fn parses_plain_version() {

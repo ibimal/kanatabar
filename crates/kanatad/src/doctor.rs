@@ -9,7 +9,7 @@
 //! degrades to an actionable failure rather than panicking (SPEC §15).
 
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use kanatabar_core::doctor::checks;
@@ -55,7 +55,7 @@ pub async fn run(
     let (driver, vhid) = driver_checks(driver_probe).await;
     vec![
         daemon_check(started),
-        kanata_binary_check(configmgr, health),
+        kanata_binary_check(configmgr, health, peer_uid),
         driver_present_check(driver_probe.is_some()),
         driver,
         driver_version_check(driver_probe.is_some(), health).await,
@@ -173,26 +173,63 @@ fn daemon_check(started: Instant) -> DoctorCheck {
     )
 }
 
-fn kanata_binary_check(configmgr: &ConfigManager, health: &HealthState) -> DoctorCheck {
+fn kanata_binary_check(
+    configmgr: &ConfigManager,
+    health: &HealthState,
+    peer_uid: u32,
+) -> DoctorCheck {
     let bin = configmgr.active_target().kanata_bin;
     let version = health.snapshot().kanata_version;
     if bin.is_file() {
         let version = version.unwrap_or_else(|| "version unknown".to_string());
-        ok(
+        return ok(
             checks::KANATA_BINARY,
             format!("{} ({version})", bin.display()),
-        )
-    } else {
-        fail(
-            checks::KANATA_BINARY,
-            format!("not found: {}", bin.display()),
-            format!(
-                "install kanata (e.g. `brew install kanata`) — the daemon auto-detects {} — \
-                 or set kanata_bin in config.toml, then restart kanatad",
-                kanatabar_core::kanata::KANATA_BIN_CANDIDATES.join(" or ")
-            ),
-        )
+        );
     }
+    // Not in the auto-detected locations. Before the generic message, look
+    // where `cargo install kanata` / MacPorts put it (a common case an early
+    // user hit) so we can point the user at the exact fix instead of "not
+    // found". We never auto-run it from there — that would trust a
+    // user-writable path from root (§14); the user opts in via kanata_bin.
+    if let Some(found) = alt_kanata_location(peer_uid) {
+        return fail(
+            checks::KANATA_BINARY,
+            format!(
+                "not in the auto-detected locations, but found at {}",
+                found.display()
+            ),
+            format!(
+                "that path isn't auto-trusted (the root daemon won't run a user-writable \
+                 binary). Point KanataBar at it: add to config.toml under [defaults]\n    \
+                 kanata_bin = \"{}\"\nthen restart the daemon: \
+                 sudo launchctl kickstart -k system/io.github.ibimal.kanatabar.daemon",
+                found.display()
+            ),
+        );
+    }
+    fail(
+        checks::KANATA_BINARY,
+        format!("not found: {}", bin.display()),
+        format!(
+            "install kanata (e.g. `brew install kanata`) — the daemon auto-detects {} — \
+             or set kanata_bin in config.toml, then restart kanatad",
+            kanatabar_core::kanata::KANATA_BIN_CANDIDATES.join(" or ")
+        ),
+    )
+}
+
+/// Probe the common non-allowlist kanata locations for the requesting user
+/// (their `~/.cargo/bin`, MacPorts), returning the first that exists. Used only
+/// to enrich the "not found" message (SPEC §7.3, §14).
+fn alt_kanata_location(peer_uid: u32) -> Option<PathBuf> {
+    let home = nix::unistd::User::from_uid(nix::unistd::Uid::from_raw(peer_uid))
+        .ok()
+        .flatten()
+        .map(|u| u.dir)?;
+    kanatabar_core::kanata::alt_kanata_locations(&home)
+        .into_iter()
+        .find(|p| p.is_file())
 }
 
 /// SPEC §11: the wizard's *install* step verifies the driver pkg is present on
