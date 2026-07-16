@@ -365,6 +365,29 @@ async fn handle_request(
                 Err(err) => config_error(id, &err),
             }
         }
+        RequestPayload::AddPreset {
+            name,
+            config,
+            autostart,
+        } => match conn.configmgr.add_preset(&name, &config, autostart).await {
+            Ok(()) => Response::ack(id),
+            Err(err) => config_error(id, &err),
+        },
+        RequestPayload::RemovePreset { name } => match conn.configmgr.remove_preset(&name).await {
+            Ok(()) => Response::ack(id),
+            Err(err) => config_error(id, &err),
+        },
+        RequestPayload::ReloadConfig => {
+            use kanatabar_core::config::ConfigStatus;
+            match conn.configmgr.reload().await {
+                ConfigStatus::Invalid { error } => Response::error(
+                    id,
+                    ErrorKind::ConfigInvalid,
+                    format!("config.toml is invalid: {error} (previous presets kept)"),
+                ),
+                _ => Response::ack(id),
+            }
+        }
 
         // ── Diagnostics (SPEC §9, §11). ─────────────────────────────────────
         RequestPayload::Doctor => {

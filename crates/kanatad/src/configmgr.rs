@@ -229,6 +229,87 @@ impl ConfigManager {
             .map_err(|err| ConfigError::Internal(format!("writing config.toml: {err}")))
     }
 
+    /// Add or update one preset (`kanatactl preset add`), preserving every
+    /// other preset and this one's advanced fields (`kanata_bin`,
+    /// `extra_args`) on update. The `.kbd` must exist — a preset pointing at
+    /// nothing is a silent trap, exactly the class of bug this batch removes.
+    /// Persists `config.toml`; does not touch the running child (switch to it
+    /// to apply). Upsert semantics.
+    pub async fn add_preset(
+        &self,
+        name: &str,
+        config: &str,
+        autostart: bool,
+    ) -> Result<(), ConfigError> {
+        if name.trim().is_empty() {
+            return Err(ConfigError::Internal("preset name is empty".to_string()));
+        }
+        if !Path::new(config).is_file() {
+            return Err(ConfigError::PathRejected(format!(
+                "no such .kbd file: {config} — create it first, or check the path"
+            )));
+        }
+        let mut file = self.file.lock().await;
+        let entry = file.presets.entry(name.to_string()).or_insert(PresetDef {
+            config: config.to_string(),
+            autostart,
+            kanata_bin: None,
+            extra_args: Vec::new(),
+        });
+        // On update, refresh the two user-facing fields, keep the advanced ones.
+        entry.config = config.to_string();
+        entry.autostart = autostart;
+        if autostart {
+            for (other, def) in file.presets.iter_mut() {
+                if other != name {
+                    def.autostart = false;
+                }
+            }
+        }
+        write_config_file(&self.paths.config_toml, &file)
+            .map_err(|err| ConfigError::Internal(format!("writing config.toml: {err}")))?;
+        *self.status.lock().await = ConfigStatus::Loaded {
+            presets: file.presets.len(),
+        };
+        info!(preset = %name, config, autostart, "preset added");
+        Ok(())
+    }
+
+    /// Remove one preset by name (`kanatactl preset remove`). Errors if it is
+    /// not configured. Persists `config.toml`; leaves the running child alone
+    /// (removing the active preset's entry doesn't stop kanata).
+    pub async fn remove_preset(&self, name: &str) -> Result<(), ConfigError> {
+        let mut file = self.file.lock().await;
+        if file.presets.remove(name).is_none() {
+            return Err(ConfigError::UnknownPreset(format!(
+                "no preset named `{name}`"
+            )));
+        }
+        write_config_file(&self.paths.config_toml, &file)
+            .map_err(|err| ConfigError::Internal(format!("writing config.toml: {err}")))?;
+        *self.status.lock().await = ConfigStatus::Loaded {
+            presets: file.presets.len(),
+        };
+        info!(preset = %name, "preset removed");
+        Ok(())
+    }
+
+    /// Re-read `config.toml` from disk (`kanatactl config reload`) so hand
+    /// edits to presets take effect without restarting the daemon. Returns the
+    /// resulting [`ConfigStatus`] so the caller can report it. A broken file is
+    /// reported (not applied) and the previous good preset list is kept. Note:
+    /// `[defaults]` changes (e.g. `kanata_bin`, `tcp_port`) still need a daemon
+    /// restart — only the preset list is hot-reloaded.
+    pub async fn reload(&self) -> ConfigStatus {
+        let (parsed, status) = load_with_status(&self.paths.config_toml);
+        if !status.is_invalid() {
+            let mut file = self.file.lock().await;
+            file.presets = parsed.presets;
+        }
+        *self.status.lock().await = status.clone();
+        status
+    }
+
     /// Enable/disable autostart of the **active** preset (SPEC §7.2
     /// `SetAutostart`); enabling clears the flag on every other preset so the
     /// startup pick (`autostart_preset`) stays unambiguous. Persists

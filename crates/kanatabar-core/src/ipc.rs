@@ -87,6 +87,24 @@ pub enum RequestPayload {
         /// The new preset set.
         presets: PresetList,
     },
+    /// Add or update a single preset (`kanatactl preset add`), preserving the
+    /// other presets and their advanced fields. Upsert semantics.
+    AddPreset {
+        /// Preset name.
+        name: String,
+        /// Path to the preset's `.kbd` file.
+        config: String,
+        /// Start this preset automatically at daemon boot.
+        autostart: bool,
+    },
+    /// Remove a single preset by name (`kanatactl preset remove`).
+    RemovePreset {
+        /// Preset name.
+        name: String,
+    },
+    /// Re-read `config.toml` from disk (`kanatactl config reload`) so hand
+    /// edits take effect without restarting the daemon.
+    ReloadConfig,
     /// Fetch the last `lines` buffered log lines.
     GetLogs {
         /// Number of lines to return.
@@ -400,6 +418,15 @@ mod tests {
             RequestPayload::SetPresetList {
                 presets: PresetList { presets },
             },
+            RequestPayload::AddPreset {
+                name: "gaming".into(),
+                config: "/x.kbd".into(),
+                autostart: false,
+            },
+            RequestPayload::RemovePreset {
+                name: "gaming".into(),
+            },
+            RequestPayload::ReloadConfig,
             RequestPayload::GetLogs { lines: 100 },
             RequestPayload::FollowLogs,
             RequestPayload::GetDevices,

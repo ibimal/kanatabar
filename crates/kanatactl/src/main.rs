@@ -100,6 +100,21 @@ enum PresetCmd {
         /// Preset name from config.toml.
         name: String,
     },
+    /// Add or update a preset in config.toml (no need to hand-edit it).
+    Add {
+        /// Preset name.
+        name: String,
+        /// Path to the preset's `.kbd` file.
+        config: PathBuf,
+        /// Start this preset automatically when the daemon boots.
+        #[arg(long)]
+        autostart: bool,
+    },
+    /// Remove a preset from config.toml.
+    Remove {
+        /// Preset name.
+        name: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -114,6 +129,9 @@ enum ConfigCmd {
         /// Path to the `.kbd` file.
         path: PathBuf,
     },
+    /// Re-read config.toml so hand edits (presets) take effect without
+    /// restarting the daemon. `[defaults]` changes still need a restart.
+    Reload,
 }
 
 #[derive(Clone, Copy, clap::ValueEnum)]
@@ -249,6 +267,36 @@ async fn preset(client: &mut Client, cmd: PresetCmd) -> u8 {
         PresetCmd::Switch { name } => {
             simple(client, RequestPayload::SwitchPreset { name }, "switched").await
         }
+        PresetCmd::Add {
+            name,
+            config,
+            autostart,
+        } => {
+            // Absolutize client-side so config.toml stores a stable path (the
+            // daemon's cwd differs); the daemon re-checks the file exists.
+            let config = std::fs::canonicalize(&config)
+                .unwrap_or(config)
+                .display()
+                .to_string();
+            simple(
+                client,
+                RequestPayload::AddPreset {
+                    name,
+                    config,
+                    autostart,
+                },
+                "preset added",
+            )
+            .await
+        }
+        PresetCmd::Remove { name } => {
+            simple(
+                client,
+                RequestPayload::RemovePreset { name },
+                "preset removed",
+            )
+            .await
+        }
     }
 }
 
@@ -266,6 +314,9 @@ async fn config(client: &mut Client, cmd: ConfigCmd) -> u8 {
         ConfigCmd::Apply { path } => {
             let path = absolutize(path).display().to_string();
             simple(client, RequestPayload::ApplyConfig { path }, "applied").await
+        }
+        ConfigCmd::Reload => {
+            simple(client, RequestPayload::ReloadConfig, "config.toml reloaded").await
         }
     }
 }

@@ -315,3 +315,74 @@ async fn switch_preset_applies_and_lists_active() {
 
     fx.handle.shutdown().await.unwrap();
 }
+
+/// `preset add` upserts into config.toml and `preset remove` deletes — the CLI
+/// path that replaces hand-editing (v0.1.1). Add requires the .kbd to exist.
+#[tokio::test]
+async fn add_and_remove_preset_persist_and_validate() {
+    let fx = Fixture::new();
+    let kbd = fx.write("game.kbd", GOOD);
+    let kbd = kbd.display().to_string();
+
+    // Add is refused when the .kbd doesn't exist (no silent dangling preset).
+    let err = fx
+        .manager
+        .add_preset("gaming", "/no/such.kbd", false)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, ConfigError::PathRejected(_)), "got {err:?}");
+
+    // A real path adds it, and it shows up in the list.
+    fx.manager
+        .add_preset("gaming", &kbd, true)
+        .await
+        .expect("add");
+    let listed = fx.manager.list_presets().await;
+    let gaming = listed.iter().find(|p| p.name == "gaming").expect("listed");
+    assert!(gaming.autostart, "autostart flag persisted");
+
+    // Remove deletes it; removing again errors (not silent).
+    fx.manager.remove_preset("gaming").await.expect("remove");
+    assert!(fx.manager.list_presets().await.is_empty());
+    let err = fx.manager.remove_preset("gaming").await.unwrap_err();
+    assert!(matches!(err, ConfigError::UnknownPreset(_)), "got {err:?}");
+
+    fx.handle.shutdown().await.unwrap();
+}
+
+/// `config reload` re-reads a hand-edited config.toml so presets appear without
+/// a daemon restart — the gap the early user hit (v0.1.1).
+#[tokio::test]
+async fn reload_picks_up_hand_edited_presets() {
+    use kanatabar_core::config::ConfigStatus;
+    let fx = Fixture::new();
+    assert!(fx.manager.list_presets().await.is_empty());
+
+    // Hand-write config.toml the way a user would, then reload.
+    let kbd = fx.write("main.kbd", GOOD);
+    let toml = format!(
+        "schema = 1\n[presets.main]\nconfig = \"{}\"\n",
+        kbd.display()
+    );
+    std::fs::write(fx.dir.path().join("config.toml"), toml).unwrap();
+
+    let status = fx.manager.reload().await;
+    assert_eq!(status, ConfigStatus::Loaded { presets: 1 });
+    assert_eq!(fx.manager.list_presets().await.len(), 1);
+
+    // A broken edit is reported Invalid and the previous presets are kept.
+    std::fs::write(
+        fx.dir.path().join("config.toml"),
+        "schema = 1\n[presets.main",
+    )
+    .unwrap();
+    let status = fx.manager.reload().await;
+    assert!(status.is_invalid(), "broken reload reports Invalid");
+    assert_eq!(
+        fx.manager.list_presets().await.len(),
+        1,
+        "previous good presets kept on a broken reload"
+    );
+
+    fx.handle.shutdown().await.unwrap();
+}
