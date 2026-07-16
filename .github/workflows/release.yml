@@ -90,5 +90,11 @@ jobs:
           git config user.name "kanatabar-release"
           git config user.email "13629614+ibimal@users.noreply.github.com"
           git add Casks/kanatabar.rb
+          # Idempotent: nothing to do if the cask is already at this version/sha
+          # (e.g. a re-run of the same tag).
+          if git diff --cached --quiet; then
+            echo "tap already at $version — nothing to push"
+            exit 0
+          fi
           git commit -m "kanatabar $version"
           git push
