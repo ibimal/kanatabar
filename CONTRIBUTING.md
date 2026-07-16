@@ -37,6 +37,51 @@ launchd, TCC permissions, or real devices are **[HW]** territory — test agains
 relevant section of [docs/HW-TESTS.md](docs/HW-TESTS.md) and say in the PR which items
 you ran.
 
+## Releasing (maintainers)
+
+Releases are tag-driven. Pushing a `vX.Y.Z` tag runs
+[`.github/workflows/release.yml`](.github/workflows/release.yml), which builds the
+universal artifacts, publishes a GitHub Release, and bumps the Homebrew tap.
+
+1. **Bump the version** in `Cargo.toml` (`[workspace.package] version`) and run
+   `cargo build` so `Cargo.lock` updates.
+2. **Update `CHANGELOG.md`** — move the `[Unreleased]` notes into a new
+   `[X.Y.Z] - <date>` section.
+3. **Verify:** `just check` and `just gate-10` must both be green.
+4. **Commit, then tag and push:**
+   ```sh
+   git commit -am "chore(release): vX.Y.Z — <summary>"
+   git push origin main
+   git tag -a vX.Y.Z -m "KanataBar vX.Y.Z"
+   git push origin vX.Y.Z
+   ```
+   The workflow verifies the tag matches the workspace version, re-runs `gate-10`,
+   creates the Release (notes from the matching CHANGELOG section), and pushes the
+   updated cask to `ibimal/homebrew-tap`.
+
+The `[HW]` brew items (clean install, `brew upgrade`, cask uninstall) are verified by
+hand against [docs/HW-TESTS.md](docs/HW-TESTS.md) Run 9 after publishing.
+
+### Homebrew tap
+
+All KanataBar (and any future ibimal apps') casks live in the single
+[`ibimal/homebrew-tap`](https://github.com/ibimal/homebrew-tap) repo under `Casks/`.
+The cask is generated from [`packaging/homebrew/kanatabar.rb`](packaging/homebrew/kanatabar.rb)
+(the `__VERSION__`/`__SHA256__` placeholders are substituted at release time) — **edit
+the template in this repo, never the tap directly**, or the next release overwrites it.
+
+The tap bump needs a token, because a repo's default `GITHUB_TOKEN` can't push to a
+*different* repo:
+
+- Create a **fine-grained PAT** named `kanatabar-tap-bump`, scoped to **only**
+  `ibimal/homebrew-tap` with **Contents: Read and write**.
+- Add it as the `TAP_PUSH_TOKEN` repository secret:
+  `gh secret set TAP_PUSH_TOKEN --repo ibimal/kanatabar`.
+
+Without the secret the release still succeeds; the tap-bump step just prints the manual
+`version`/`sha256` to apply. Fine-grained PATs expire (max one year) — GitHub emails a
+reminder before expiry; rotate by generating a new token and re-running `gh secret set`.
+
 ## Reporting bugs
 
 Please attach `kanatactl doctor --json` output — it's designed as a bug-report bundle
