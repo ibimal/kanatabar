@@ -121,6 +121,27 @@ pub enum RequestPayload {
     },
     /// Run the full preflight checklist.
     Doctor,
+    /// Ask macOS to grant the daemon a TCC permission (SPEC §11.2). The
+    /// request **must** run in the daemon: TCC attributes a grant to the
+    /// *calling* process's code identity, and kanatad — not the tray — is the
+    /// responsible process for kanata's device access. Registers kanatad's
+    /// entry in the relevant Privacy pane (prompting when a GUI session is
+    /// available); the user then toggles it on. Replies [`ResponsePayload::Ack`].
+    RequestPermission {
+        /// Which permission to request.
+        kind: PermissionKind,
+    },
+}
+
+/// A macOS TCC permission the daemon can hold (SPEC §2, §11). Both are
+/// required for remapping; the wizard requests each on its own step.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PermissionKind {
+    /// Input Monitoring (listen to HID events) — `IOHIDRequestAccess`.
+    InputMonitoring,
+    /// Accessibility (trusted AX client) — `AXIsProcessTrustedWithOptions`.
+    Accessibility,
 }
 
 /// A daemon → client response frame. Carries the protocol version and echoes

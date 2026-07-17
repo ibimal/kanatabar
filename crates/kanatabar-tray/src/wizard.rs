@@ -36,6 +36,12 @@ pub struct WizardStep {
     /// A command for the *user* to run, shown as copyable text — steps that
     /// need sudo, which the tray never runs itself (SPEC §11.2 [HARD]).
     pub copy: Option<&'static str>,
+    /// A TCC permission the wizard can ask the *daemon* to request for the
+    /// user ("Set it up for me"): the daemon registers kanatad's entry in the
+    /// Privacy pane, then the user toggles it on. The request runs in kanatad,
+    /// not the tray — TCC grants attach to the calling process and kanatad is
+    /// the responsible process (SPEC §2 [HARD]).
+    pub request: Option<kanatabar_core::ipc::PermissionKind>,
     /// The `doctor` check name that verifies this step
     /// (`kanatabar_core::doctor::checks`), when the step maps to one.
     pub verifies: Option<&'static str>,
@@ -78,6 +84,7 @@ pub fn steps() -> Vec<WizardStep> {
             run: None,
             open: Some(KARABINER_DRIVER_URL),
             copy: None,
+            request: None,
             verifies: Some(checks::DRIVER_PRESENT),
         },
         WizardStep {
@@ -87,6 +94,7 @@ pub fn steps() -> Vec<WizardStep> {
             run: None,
             open: Some(KARABINER_DRIVER_URL),
             copy: None,
+            request: None,
             verifies: Some(checks::DRIVER_VERSION),
         },
         WizardStep {
@@ -97,6 +105,7 @@ pub fn steps() -> Vec<WizardStep> {
             run: Some(ACTIVATE_DRIVER_CMD),
             open: Some(panes::EXTENSIONS),
             copy: None,
+            request: None,
             verifies: Some(checks::DRIVER),
         },
         WizardStep {
@@ -108,6 +117,7 @@ pub fn steps() -> Vec<WizardStep> {
             run: None,
             open: None,
             copy: Some("sudo kanatactl install"),
+            request: None,
             verifies: Some(checks::VHID_MANAGED),
         },
         WizardStep {
@@ -120,6 +130,7 @@ pub fn steps() -> Vec<WizardStep> {
             run: None,
             open: Some(panes::INPUT_MONITORING),
             copy: None,
+            request: Some(kanatabar_core::ipc::PermissionKind::InputMonitoring),
             verifies: Some(checks::INPUT_MONITORING),
         },
         WizardStep {
@@ -131,6 +142,7 @@ pub fn steps() -> Vec<WizardStep> {
             run: None,
             open: Some(panes::ACCESSIBILITY),
             copy: None,
+            request: Some(kanatabar_core::ipc::PermissionKind::Accessibility),
             verifies: Some(checks::ACCESSIBILITY),
         },
         WizardStep {
@@ -140,6 +152,7 @@ pub fn steps() -> Vec<WizardStep> {
             run: None,
             open: None,
             copy: Some("sudo kanatactl install"),
+            request: None,
             verifies: Some(checks::DAEMON),
         },
         WizardStep {
@@ -148,6 +161,7 @@ pub fn steps() -> Vec<WizardStep> {
             run: None,
             open: None,
             copy: None,
+            request: None,
             verifies: None,
         },
     ]
