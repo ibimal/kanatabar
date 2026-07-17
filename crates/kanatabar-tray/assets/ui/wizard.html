@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- Hardening (docs/design/phase12-ui-layer.md): nothing loads from anywhere
+     but the kbasset embed protocol; inline style/script are ours, and every
+     dynamic string is inserted with textContent, never innerHTML. Buttons
+     only post step *indices*; the shell validates them against the static
+     step table and never executes page-supplied commands or URLs. -->
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; img-src kbasset:; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<meta name="color-scheme" content="light dark">
+<title>Setup Assistant</title>
+<style>
+/*__SHARED_CSS__*/
+.step-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--separator);
+  color: var(--text-secondary);
+}
+.step-icon.done { background: var(--ok-bg); color: var(--ok); }
+.step-icon.current { background: var(--accent); color: #fff; }
+.row.pending .text { color: var(--text-secondary); }
+.instruction {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 3px;
+  white-space: pre-line;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.row.current-row { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+</style>
+</head>
+<body>
+<main id="content">
+<header>
+  <img src="kbasset://app/icon.png" alt="">
+  <div>
+    <h1>Setup Assistant</h1>
+    <p id="summary">Loading…</p>
+  </div>
+</header>
+<div class="card" id="list">
+  <div class="empty">Checking your setup…</div>
+</div>
+<div class="success" id="completion" hidden></div>
+</main>
+<script>
+"use strict";
+function el(tag, cls, text) {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+function postHeight() {
+  if (!window.ipc) return;
+  requestAnimationFrame(() => {
+    const content = document.getElementById("content").offsetHeight;
+    window.ipc.postMessage("height:" + Math.ceil(content + 32));
+  });
+}
+function post(msg) {
+  if (window.ipc) window.ipc.postMessage(msg);
+}
+/* Called from Rust via evaluate_script with the serde-serialized
+   wizardwin::WizardView (shape pinned by the lib's view_json_shape test). */
+window.__render = (view) => {
+  document.getElementById("summary").textContent = view.summary;
+  const list = document.getElementById("list");
+  list.replaceChildren();
+  for (const row of view.rows) {
+    const r = el("div", "row tall " + row.state + (row.state === "current" ? " current-row" : ""));
+    const icon = el("span", "step-icon " + row.state,
+                    row.state === "done" ? "✓" : String(row.index + 1));
+    r.appendChild(icon);
+    const text = el("div", "text");
+    text.appendChild(el("div", undefined, row.title));
+    if (row.state === "current") {
+      text.appendChild(el("div", "instruction", row.instruction));
+      const actions = el("div", "actions");
+      if (row.can_run) {
+        const run = el("button", undefined, "Do it for me");
+        run.addEventListener("click", () => post("run:" + row.index));
+        actions.appendChild(run);
+      }
+      if (row.open_label) {
+        const open = el("button", row.can_run ? "quiet" : undefined, row.open_label);
+        open.addEventListener("click", () => post("open:" + row.index));
+        actions.appendChild(open);
+      }
+      if (row.copy) {
+        const code = el("span", "code", row.copy);
+        code.title = "Click to copy";
+        code.addEventListener("click", () => {
+          navigator.clipboard.writeText(row.copy).then(() => {
+            code.classList.add("copied");
+            setTimeout(() => code.classList.remove("copied"), 1200);
+          });
+        });
+        actions.appendChild(code);
+      }
+      if (actions.childNodes.length) text.appendChild(actions);
+    }
+    r.appendChild(text);
+    list.appendChild(r);
+  }
+  const completion = document.getElementById("completion");
+  completion.hidden = !view.completion;
+  completion.textContent = view.completion || "";
+  postHeight();
+};
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") post("close");
+});
+post("ready");
+</script>
+</body>
+</html>

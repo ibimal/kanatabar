@@ -1356,6 +1356,65 @@ fallback firing IS a finding (ledger #17).
 
 ***
 
+## Run 11 — Phase 12 windows: Setup Assistant & Health Check (SPEC §11.2–§11.3)
+
+**Setup:** same as Run 10 (daemon up, tray unbundled via
+`cargo run -p kanatabar-tray`). The panel items (float in tiling WMs, Esc
+closes, content-fit, accessory focus) are shared shell behaviour already
+covered by Run 10 — spot-check, don't re-verify per window.
+
+**Health Check (§11.3):**
+
+* [ ] **Full checklist renders** — menu → Health Check….
+  **Expect:** all 12 checks with ✅/❌ dot, detail line, and (on failures) the
+  monospace `↳ fix hint`; identical content to `kanatactl doctor`.
+* [ ] **Copy report round-trips** — click "Copy report", paste into a file.
+  **Expect:** valid JSON, same content as `kanatactl doctor --json` (the §9
+  bug-report bundle); the button flashes "Copied".
+* [ ] **Setup-class failure delegates** — with a setup-class check failing
+  (e.g. driver deactivated), its row shows **Open Setup Assistant** and the
+  click opens the wizard at the earliest failing step. Runtime-class
+  failures (e.g. a broken active config) show the hint only — **no** button
+  (§11 [HARD] anti-overlap).
+* [ ] **Daemon down renders in-window** — stop the daemon, open Health Check.
+  **Expect:** "Health check unavailable" + the error in the card; no
+  notification.
+
+**Setup Assistant (§11.2):**
+
+* [ ] **Auto-open on incomplete setup** — quit the tray, stop the daemon
+  (`sudo launchctl bootout system/io.github.ibimal.kanatabar.daemon` or a
+  machine without it), relaunch the tray.
+  **Expect:** within ~6 s the Setup Assistant opens itself on the
+  **Install the KanataBar service** step (daemon unreachable ⇒ that step),
+  showing the copyable `sudo kanatactl install`. With everything green,
+  relaunching the tray must **not** auto-open it.
+* [ ] **Live re-check, no clicks** — open with the extension deactivated
+  (`Karabiner-VirtualHIDDevice-Manager deactivate`… then the wizard's
+  activate step is current). Click "Do it for me", approve in System
+  Settings when it opens.
+  **Expect:** the step flips ✓ and the next step expands by itself within
+  ~2–4 s of approval — no re-check button anywhere (Karabiner-Elements
+  pattern; the ~2 s poll only runs while the window is open).
+* [ ] **Buttons do what they say** — on the activate step: "Do it for me"
+  runs the manager activation (log line `wizard step command succeeded`);
+  "Open System Settings" lands on Login Items & Extensions (ledger #5
+  anchors).
+* [ ] **sudo is never a button** — on the VHID/install steps.
+  **Expect:** a copyable `sudo kanatactl install` chip (click copies,
+  flashes green), instruction text, and **no** run button.
+* [ ] **Degradation overrides green** — with all checks green force
+  `Degraded{InputMonitoringDenied}` (revoke the kanatad grant while
+  running, Run 4 recipe).
+  **Expect:** the wizard shows the **Grant Input Monitoring** step as
+  current, not "Setup complete" (HW Run 9 finding, now in the window).
+* [ ] **Completion state** — everything green and healthy.
+  **Expect:** every step ✓, "Setup complete" summary, and the green
+  completion panel (preset-aware: suggests `kanatactl preset add` when no
+  preset is configured).
+
+***
+
 ## Consolidated open \[VERIFY] ledger
 
 Resolve each during the run noted; record the answer here (these feed code

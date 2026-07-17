@@ -39,6 +39,12 @@ const SHARED_CSS: &str = include_str!("../assets/ui/shared.css");
 /// The devices page (SPEC §8), with the shared sheet spliced in at build time.
 const DEVICES_HTML: &str = include_str!("../assets/ui/devices.html");
 
+/// The Health Check page (SPEC §11.3).
+const HEALTH_HTML: &str = include_str!("../assets/ui/health.html");
+
+/// The Setup Assistant page (SPEC §11.2).
+const WIZARD_HTML: &str = include_str!("../assets/ui/wizard.html");
+
 /// The placeholder each page's `<style>` block carries for [`SHARED_CSS`].
 const CSS_SLOT: &str = "/*__SHARED_CSS__*/";
 
@@ -74,6 +80,35 @@ impl ShellWindow {
             // the first render grows it to content, which beats shrinking.
             LogicalSize::new(400.0, 280.0),
             DEVICES_HTML,
+            on_ipc,
+        )
+    }
+
+    /// Create the Health Check window, hidden (SPEC §11.3). Wider than the
+    /// devices panel: check details and fix hints are sentences.
+    pub fn health<T>(
+        target: &EventLoopWindowTarget<T>,
+        on_ipc: impl Fn(String) + 'static,
+    ) -> Result<Self> {
+        Self::build(
+            target,
+            "KanataBar Health Check",
+            LogicalSize::new(480.0, 320.0),
+            HEALTH_HTML,
+            on_ipc,
+        )
+    }
+
+    /// Create the Setup Assistant window, hidden (SPEC §11.2).
+    pub fn wizard<T>(
+        target: &EventLoopWindowTarget<T>,
+        on_ipc: impl Fn(String) + 'static,
+    ) -> Result<Self> {
+        Self::build(
+            target,
+            "KanataBar Setup Assistant",
+            LogicalSize::new(480.0, 320.0),
+            WIZARD_HTML,
             on_ipc,
         )
     }

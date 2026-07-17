@@ -30,8 +30,9 @@ use kanatabar_tray::conn::{self, Update};
 use kanatabar_tray::menu::{self, ids};
 use kanatabar_tray::model::MenuModel;
 use kanatabar_tray::notify::{BundledNotifier, Notifier, OsascriptNotifier};
+use kanatabar_tray::pages::{PageId, PageMessage};
 use kanatabar_tray::single_instance::{self, SingleInstanceLock};
-use kanatabar_tray::{devwin, icons, login, wizard};
+use kanatabar_tray::{devwin, healthwin, icons, login, wizard, wizardwin};
 
 use ui_shell::ShellWindow;
 
@@ -42,17 +43,57 @@ enum UserEvent {
     Model(Box<MenuModel>),
     /// A menu item with this id was clicked.
     MenuClick(String),
+    /// A parsed ipc message from a Phase 12 page (`pages::parse`).
+    Page(PageId, PageMessage),
     /// A fresh device list arrived for the devices window (SPEC §8).
-    Devices(Box<devwin::DevicesView>),
-    /// The devices page loaded and can accept renders.
-    DevicesPageReady,
+    DevicesData(Box<devwin::DevicesView>),
+    /// A fresh doctor report arrived for the Health Check window (§11.3).
+    HealthData(Box<healthwin::HealthView>),
+    /// A fresh wizard state arrived for the Setup Assistant window (§11.2).
+    WizardData(Box<wizardwin::WizardView>),
     /// Hotplug: re-fetch the device list if the window is showing.
     DevicesChanged,
-    /// The devices page reported its content height (logical px) for the
-    /// shell's window fit.
-    DevicesContentHeight(f64),
-    /// The devices page asked to close (Escape — panel convention).
-    DevicesCloseRequested,
+    /// The wizard's ~2 s live re-check fired (SPEC §11.2).
+    WizardTick,
+    /// Startup found setup incomplete → auto-open the wizard (SPEC §11.2).
+    AutoOpenWizard,
+}
+
+/// The Phase 12 windows, all lazily created and hidden on close.
+#[derive(Default)]
+struct Windows {
+    devices: Option<ShellWindow>,
+    health: Option<ShellWindow>,
+    wizard: Option<ShellWindow>,
+}
+
+impl Windows {
+    fn slot_mut(&mut self, page: PageId) -> &mut Option<ShellWindow> {
+        match page {
+            PageId::Devices => &mut self.devices,
+            PageId::Health => &mut self.health,
+            PageId::Wizard => &mut self.wizard,
+        }
+    }
+
+    fn get(&self, page: PageId) -> Option<&ShellWindow> {
+        match page {
+            PageId::Devices => self.devices.as_ref(),
+            PageId::Health => self.health.as_ref(),
+            PageId::Wizard => self.wizard.as_ref(),
+        }
+    }
+
+    fn get_mut(&mut self, page: PageId) -> Option<&mut ShellWindow> {
+        self.slot_mut(page).as_mut()
+    }
+
+    /// The page owning a tao window id (for `WindowEvent` routing).
+    fn page_for(&self, id: tao::window::WindowId) -> Option<PageId> {
+        [PageId::Devices, PageId::Health, PageId::Wizard]
+            .into_iter()
+            .find(|page| self.get(*page).is_some_and(|w| w.id() == id))
+    }
 }
 
 /// Resolve the control-socket path (SPEC §3.2), overridable for dev/test.
@@ -140,9 +181,39 @@ fn main() -> Result<()> {
     let mut login_loaded = login::is_loaded(uid);
     let home = std::env::var_os("HOME").map(PathBuf::from);
     // Phase 12 windows: created lazily on first open, hidden on close.
-    let mut devices_window: Option<ShellWindow> = None;
+    let mut windows = Windows::default();
+    // Guards the wizard's ~2 s re-check chain: at most one pending tick.
+    let mut wizard_tick_pending = false;
     let ipc_proxy = event_loop.create_proxy();
-    let devices_proxy = event_loop.create_proxy();
+    let data_proxy = event_loop.create_proxy();
+
+    // Auto-open the Setup Assistant when setup is incomplete (SPEC §11.2).
+    // A few retries absorb the login race where the agent starts before the
+    // daemon answers; an unreachable daemon after that IS setup-incomplete
+    // (the wizard's install step) — a fresh machine, not an error.
+    {
+        let socket = socket.clone();
+        let proxy = event_loop.create_proxy();
+        runtime.spawn(async move {
+            let mut checks = None;
+            for attempt in 0..3 {
+                if attempt > 0 {
+                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                }
+                if let Ok(fetched) = conn::fetch_doctor(&socket).await {
+                    checks = Some(fetched);
+                    break;
+                }
+            }
+            let complete = checks
+                .as_deref()
+                .map(kanatabar_core::doctor::setup_complete)
+                .unwrap_or(false);
+            if !complete {
+                let _ = proxy.send_event(UserEvent::AutoOpenWizard);
+            }
+        });
+    }
 
     event_loop.run(move |event, target, control_flow| {
         *control_flow = ControlFlow::Wait;
@@ -183,61 +254,40 @@ fn main() -> Result<()> {
                         );
                     }
                 } else if id == ids::DEVICES {
-                    // Open (or re-show) the devices window (SPEC §8, Phase 12)
-                    // and fetch a fresh list. If the webview can't be created,
-                    // fall back to the v0.1.x notification so the menu item
-                    // still answers.
-                    if devices_window.is_none() {
-                        let proxy = ipc_proxy.clone();
-                        match ShellWindow::devices(target, move |message| {
-                            if message == "ready" {
-                                let _ = proxy.send_event(UserEvent::DevicesPageReady);
-                            } else if message == "close" {
-                                let _ = proxy.send_event(UserEvent::DevicesCloseRequested);
-                            } else if let Some(height) = message
-                                .strip_prefix("height:")
-                                .and_then(|v| v.parse::<f64>().ok())
-                            {
-                                let _ = proxy.send_event(UserEvent::DevicesContentHeight(height));
-                            }
-                        }) {
-                            Ok(window) => devices_window = Some(window),
-                            Err(err) => {
-                                tracing::warn!(%err, "devices window unavailable");
-                            }
-                        }
-                    }
-                    match devices_window.as_mut() {
-                        Some(window) => {
-                            window.show();
-                            fetch_devices_for_window(
-                                &action_handle,
-                                socket.clone(),
-                                devices_proxy.clone(),
-                            );
-                        }
-                        None => run_devices_action(
-                            &action_handle,
-                            socket.clone(),
-                            Arc::clone(&action_notifier),
-                        ),
-                    }
+                    open_page(
+                        PageId::Devices,
+                        &mut windows,
+                        target,
+                        &ipc_proxy,
+                        &data_proxy,
+                        &action_handle,
+                        &socket,
+                        &action_notifier,
+                    );
                 } else if id == ids::VIEW_LOGS {
                     // The daemon's logs; the folder also holds vhidd logs.
                     open_url("/Library/Logs/KanataBar");
                 } else if id == ids::DOCTOR {
-                    run_doctor_action(
+                    open_page(
+                        PageId::Health,
+                        &mut windows,
+                        target,
+                        &ipc_proxy,
+                        &data_proxy,
                         &action_handle,
-                        socket.clone(),
-                        Arc::clone(&action_notifier),
-                        DoctorAction::Report,
+                        &socket,
+                        &action_notifier,
                     );
                 } else if id == ids::WIZARD {
-                    run_doctor_action(
+                    open_page(
+                        PageId::Wizard,
+                        &mut windows,
+                        target,
+                        &ipc_proxy,
+                        &data_proxy,
                         &action_handle,
-                        socket.clone(),
-                        Arc::clone(&action_notifier),
-                        DoctorAction::Wizard,
+                        &socket,
+                        &action_notifier,
                     );
                 } else if let Some(payload) = menu::payload_for(&id) {
                     // Fire-and-forget: the event stream reflects the result.
@@ -246,34 +296,101 @@ fn main() -> Result<()> {
                     }
                 }
             }
-            Event::UserEvent(UserEvent::Devices(view)) => {
-                if let Some(window) = devices_window.as_mut() {
-                    match serde_json::to_string(&*view) {
-                        Ok(json) => window.render(json),
-                        Err(err) => tracing::warn!(%err, "devices view serialization failed"),
+            Event::UserEvent(UserEvent::Page(page, message)) => match message {
+                PageMessage::Ready => {
+                    if let Some(window) = windows.get_mut(page) {
+                        window.page_ready();
                     }
                 }
+                PageMessage::Close => {
+                    if let Some(window) = windows.get(page) {
+                        window.hide();
+                    }
+                }
+                PageMessage::Height(height) => {
+                    if let Some(window) = windows.get_mut(page) {
+                        window.fit_content_height(height);
+                    }
+                }
+                // §11.3 tier-2 delegation: the Health page's only action.
+                PageMessage::OpenWizard => open_page(
+                    PageId::Wizard,
+                    &mut windows,
+                    target,
+                    &ipc_proxy,
+                    &data_proxy,
+                    &action_handle,
+                    &socket,
+                    &action_notifier,
+                ),
+                // "Do it for me": run the step's own argv (validated by
+                // pages::parse against the static table), then re-check.
+                PageMessage::RunStep(index) => {
+                    if let Some(argv) = wizard::steps().get(index).and_then(|s| s.run) {
+                        let socket = socket.clone();
+                        let proxy = data_proxy.clone();
+                        action_handle.spawn(async move {
+                            run_step_command(argv).await;
+                            fetch_wizard_view(&socket, &proxy).await;
+                        });
+                    }
+                }
+                PageMessage::OpenStep(index) => {
+                    if let Some(url) = wizard::steps().get(index).and_then(|s| s.open) {
+                        open_url(url);
+                    }
+                }
+            },
+            Event::UserEvent(UserEvent::DevicesData(view)) => {
+                render_page(&mut windows, PageId::Devices, &*view);
             }
-            Event::UserEvent(UserEvent::DevicesPageReady) => {
-                if let Some(window) = devices_window.as_mut() {
-                    window.page_ready();
+            Event::UserEvent(UserEvent::HealthData(view)) => {
+                render_page(&mut windows, PageId::Health, &*view);
+            }
+            Event::UserEvent(UserEvent::WizardData(view)) => {
+                render_page(&mut windows, PageId::Wizard, &*view);
+                // Live re-check (SPEC §11.2): keep a single 2 s tick chained
+                // while the window is visible — TCC approval produces no
+                // event, so the wizard polls where the other pages subscribe.
+                let visible = windows
+                    .get(PageId::Wizard)
+                    .is_some_and(ShellWindow::is_visible);
+                if visible && !wizard_tick_pending {
+                    wizard_tick_pending = true;
+                    let proxy = data_proxy.clone();
+                    action_handle.spawn(async move {
+                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                        let _ = proxy.send_event(UserEvent::WizardTick);
+                    });
                 }
             }
-            Event::UserEvent(UserEvent::DevicesContentHeight(height)) => {
-                if let Some(window) = devices_window.as_mut() {
-                    window.fit_content_height(height);
+            Event::UserEvent(UserEvent::WizardTick) => {
+                wizard_tick_pending = false;
+                if windows
+                    .get(PageId::Wizard)
+                    .is_some_and(ShellWindow::is_visible)
+                {
+                    fetch_wizard_for_window(&action_handle, socket.clone(), data_proxy.clone());
                 }
             }
-            Event::UserEvent(UserEvent::DevicesCloseRequested) => {
-                if let Some(window) = devices_window.as_ref() {
-                    window.hide();
-                }
-            }
+            Event::UserEvent(UserEvent::AutoOpenWizard) => open_page(
+                PageId::Wizard,
+                &mut windows,
+                target,
+                &ipc_proxy,
+                &data_proxy,
+                &action_handle,
+                &socket,
+                &action_notifier,
+            ),
             Event::UserEvent(UserEvent::DevicesChanged) => {
                 // Hotplug while the window is showing: refresh in place
                 // (SPEC §8). Hidden windows don't fetch.
-                if devices_window.as_ref().is_some_and(ShellWindow::is_visible) {
-                    fetch_devices_for_window(&action_handle, socket.clone(), devices_proxy.clone());
+                if windows
+                    .get(PageId::Devices)
+                    .is_some_and(ShellWindow::is_visible)
+                {
+                    fetch_devices_for_window(&action_handle, socket.clone(), data_proxy.clone());
                 }
             }
             Event::WindowEvent {
@@ -282,8 +399,8 @@ fn main() -> Result<()> {
                 ..
             } => {
                 // Phase 12 windows hide on close (instant re-open, state kept).
-                if let Some(window) = devices_window.as_ref() {
-                    if window.id() == window_id {
+                if let Some(page) = windows.page_for(window_id) {
+                    if let Some(window) = windows.get(page) {
                         window.hide();
                     }
                 }
@@ -291,6 +408,132 @@ fn main() -> Result<()> {
             _ => {}
         }
     })
+}
+
+/// Serialize a view-model and push it into a page (drop silently when the
+/// window was never created — a late fetch after a failed open).
+fn render_page<V: serde::Serialize>(windows: &mut Windows, page: PageId, view: &V) {
+    if let Some(window) = windows.get_mut(page) {
+        match serde_json::to_string(view) {
+            Ok(json) => window.render(json),
+            Err(err) => tracing::warn!(%err, ?page, "view serialization failed"),
+        }
+    }
+}
+
+/// Open (or re-show) a Phase 12 window and start its initial fetch. If the
+/// webview can't be created, fall back to the v0.1.x notification-driven
+/// action so the menu item still answers (SPEC §11 interim note).
+#[allow(clippy::too_many_arguments)]
+fn open_page(
+    page: PageId,
+    windows: &mut Windows,
+    target: &tao::event_loop::EventLoopWindowTarget<UserEvent>,
+    ipc_proxy: &EventLoopProxy<UserEvent>,
+    data_proxy: &EventLoopProxy<UserEvent>,
+    handle: &tokio::runtime::Handle,
+    socket: &std::path::Path,
+    notifier: &Arc<dyn Notifier>,
+) {
+    let slot = windows.slot_mut(page);
+    if slot.is_none() {
+        let proxy = ipc_proxy.clone();
+        let on_ipc = move |message: String| {
+            if let Some(parsed) = kanatabar_tray::pages::parse(page, &message) {
+                let _ = proxy.send_event(UserEvent::Page(page, parsed));
+            }
+        };
+        let built = match page {
+            PageId::Devices => ShellWindow::devices(target, on_ipc),
+            PageId::Health => ShellWindow::health(target, on_ipc),
+            PageId::Wizard => ShellWindow::wizard(target, on_ipc),
+        };
+        match built {
+            Ok(window) => *slot = Some(window),
+            Err(err) => tracing::warn!(%err, ?page, "window unavailable"),
+        }
+    }
+    match slot.as_mut() {
+        Some(window) => {
+            window.show();
+            match page {
+                PageId::Devices => {
+                    fetch_devices_for_window(handle, socket.to_path_buf(), data_proxy.clone());
+                }
+                PageId::Health => {
+                    fetch_health_for_window(handle, socket.to_path_buf(), data_proxy.clone());
+                }
+                PageId::Wizard => {
+                    fetch_wizard_for_window(handle, socket.to_path_buf(), data_proxy.clone());
+                }
+            }
+        }
+        // Webview-less fallback (SPEC §11 v0.1.x interim behavior).
+        None => match page {
+            PageId::Devices => {
+                run_devices_action(handle, socket.to_path_buf(), Arc::clone(notifier));
+            }
+            PageId::Health => run_doctor_action(
+                handle,
+                socket.to_path_buf(),
+                Arc::clone(notifier),
+                DoctorAction::Report,
+            ),
+            PageId::Wizard => run_doctor_action(
+                handle,
+                socket.to_path_buf(),
+                Arc::clone(notifier),
+                DoctorAction::Wizard,
+            ),
+        },
+    }
+}
+
+/// Fetch a doctor report off-thread and marshal the Health view back into the
+/// event loop (SPEC §11.3). Errors render in the window, not as notifications.
+fn fetch_health_for_window(
+    handle: &tokio::runtime::Handle,
+    socket: PathBuf,
+    proxy: EventLoopProxy<UserEvent>,
+) {
+    handle.spawn(async move {
+        let view = match conn::fetch_doctor(&socket).await {
+            Ok(checks) => healthwin::view(&checks),
+            Err(err) => healthwin::error(&err.to_string()),
+        };
+        let _ = proxy.send_event(UserEvent::HealthData(Box::new(view)));
+    });
+}
+
+/// Fetch everything the wizard needs (doctor + supervisor degradation +, when
+/// complete, the preset-aware completion message) and marshal the view back.
+fn fetch_wizard_for_window(
+    handle: &tokio::runtime::Handle,
+    socket: PathBuf,
+    proxy: EventLoopProxy<UserEvent>,
+) {
+    handle.spawn(async move { fetch_wizard_view(&socket, &proxy).await });
+}
+
+async fn fetch_wizard_view(socket: &std::path::Path, proxy: &EventLoopProxy<UserEvent>) {
+    // The daemon runs doctor, so unreachable-daemon has no report — synthesize
+    // the failing daemon check and the wizard lands on its install step.
+    let checks = match conn::fetch_doctor(socket).await {
+        Ok(checks) => checks,
+        Err(err) => wizardwin::daemon_unreachable_checks(&err.to_string()),
+    };
+    // HW Run 9: the supervisor's degraded reason overrides a green checklist.
+    let degraded = conn::fetch_status_once(socket)
+        .await
+        .ok()
+        .and_then(|status| status.degraded_reason);
+    let completion = if wizard::first_unsatisfied(&checks, degraded).is_none() {
+        Some(wizard_completion(socket).await.1)
+    } else {
+        None
+    };
+    let view = wizardwin::view(&checks, degraded, completion.as_deref());
+    let _ = proxy.send_event(UserEvent::WizardData(Box::new(view)));
 }
 
 /// Fetch the device list off-thread and marshal the view-model back into the
@@ -306,7 +549,7 @@ fn fetch_devices_for_window(
             Ok(devices) => devwin::view(&devices),
             Err(err) => devwin::error(&err.to_string()),
         };
-        let _ = proxy.send_event(UserEvent::Devices(Box::new(view)));
+        let _ = proxy.send_event(UserEvent::DevicesData(Box::new(view)));
     });
 }
 
@@ -742,9 +985,14 @@ fn build_menu(model: &MenuModel, login_loaded: bool) -> Menu {
     let _ = menu.append(&MenuItem::with_id(ids::VIEW_LOGS, "View Logs", true, None));
     let _ = menu.append(&PredefinedMenuItem::separator());
 
-    // Diagnostics & onboarding (SPEC §9, §11).
-    let _ = menu.append(&MenuItem::with_id(ids::WIZARD, "Setup Wizard…", true, None));
-    let _ = menu.append(&MenuItem::with_id(ids::DOCTOR, "Run Doctor", true, None));
+    // Diagnostics & onboarding (SPEC §8, §11: the Phase 12 windows).
+    let _ = menu.append(&MenuItem::with_id(
+        ids::WIZARD,
+        "Setup Assistant…",
+        true,
+        None,
+    ));
+    let _ = menu.append(&MenuItem::with_id(ids::DOCTOR, "Health Check…", true, None));
     let _ = menu.append(&PredefinedMenuItem::separator());
 
     // Per-user agent toggle (SPEC §8).

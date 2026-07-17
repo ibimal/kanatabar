@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- Hardening (docs/design/phase12-ui-layer.md): nothing loads from anywhere
+     but the kbasset embed protocol; inline style/script are ours, and every
+     dynamic string is inserted with textContent, never innerHTML. -->
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; img-src kbasset:; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<meta name="color-scheme" content="light dark">
+<title>Health Check</title>
+<style>
+/*__SHARED_CSS__*/
+header .spacer { flex: 1; }
+.hint {
+  font: 11.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  white-space: pre-wrap;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.row .actions { margin-top: 6px; }
+</style>
+</head>
+<body>
+<main id="content">
+<header>
+  <img src="kbasset://app/icon.png" alt="">
+  <div>
+    <h1>Health Check</h1>
+    <p id="summary">Loading…</p>
+  </div>
+  <div class="spacer"></div>
+  <button id="copy" class="quiet" hidden>Copy report</button>
+</header>
+<div class="card" id="list">
+  <div class="empty">Waiting for the daemon…</div>
+</div>
+</main>
+<script>
+"use strict";
+function el(tag, cls, text) {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+function postHeight() {
+  if (!window.ipc) return;
+  requestAnimationFrame(() => {
+    const content = document.getElementById("content").offsetHeight;
+    window.ipc.postMessage("height:" + Math.ceil(content + 32));
+  });
+}
+let reportJson = "";
+/* Called from Rust via evaluate_script with the serde-serialized
+   healthwin::HealthView (shape pinned by the lib's view_json_shape test). */
+window.__render = (view) => {
+  document.getElementById("summary").textContent = view.summary;
+  reportJson = JSON.stringify(view.report, null, 2);
+  document.getElementById("copy").hidden = view.report.length === 0;
+  const list = document.getElementById("list");
+  list.replaceChildren();
+  if (view.error) {
+    list.appendChild(el("div", "error", view.error));
+  } else {
+    for (const row of view.rows) {
+      const r = el("div", "row tall");
+      r.appendChild(el("span", "dot " + (row.ok ? "on" : "bad")));
+      const text = el("div", "text");
+      text.appendChild(el("div", undefined, row.name));
+      text.appendChild(el("div", "detail", row.detail));
+      if (row.fix_hint) text.appendChild(el("div", "hint", "↳ " + row.fix_hint));
+      if (row.wizard_step !== null && row.wizard_step !== undefined) {
+        const actions = el("div", "actions");
+        const btn = el("button", undefined, "Open Setup Assistant");
+        btn.addEventListener("click", () => {
+          if (window.ipc) window.ipc.postMessage("open-wizard");
+        });
+        actions.appendChild(btn);
+        text.appendChild(actions);
+      }
+      r.appendChild(text);
+      list.appendChild(r);
+    }
+  }
+  postHeight();
+};
+document.getElementById("copy").addEventListener("click", (e) => {
+  navigator.clipboard.writeText(reportJson).then(() => {
+    e.target.textContent = "Copied";
+    setTimeout(() => { e.target.textContent = "Copy report"; }, 1200);
+  });
+});
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && window.ipc) window.ipc.postMessage("close");
+});
+if (window.ipc) window.ipc.postMessage("ready");
+</script>
+</body>
+</html>

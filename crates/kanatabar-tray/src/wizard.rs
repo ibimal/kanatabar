@@ -33,6 +33,9 @@ pub struct WizardStep {
     /// A URL or `x-apple.systempreferences:` pane to `open(1)` for this step,
     /// when one applies (SPEC §11: "openable, not clickable, by us").
     pub open: Option<&'static str>,
+    /// A command for the *user* to run, shown as copyable text — steps that
+    /// need sudo, which the tray never runs itself (SPEC §11.2 [HARD]).
+    pub copy: Option<&'static str>,
     /// The `doctor` check name that verifies this step
     /// (`kanatabar_core::doctor::checks`), when the step maps to one.
     pub verifies: Option<&'static str>,
@@ -74,6 +77,7 @@ pub fn steps() -> Vec<WizardStep> {
                           (SPEC §2: the newest driver is not always the supported one).",
             run: None,
             open: Some(KARABINER_DRIVER_URL),
+            copy: None,
             verifies: Some(checks::DRIVER_PRESENT),
         },
         WizardStep {
@@ -82,6 +86,7 @@ pub fn steps() -> Vec<WizardStep> {
                           driver release your kanata version supports.",
             run: None,
             open: Some(KARABINER_DRIVER_URL),
+            copy: None,
             verifies: Some(checks::DRIVER_VERSION),
         },
         WizardStep {
@@ -91,6 +96,7 @@ pub fn steps() -> Vec<WizardStep> {
                           System Settings → Privacy & Security, then re-check.",
             run: Some(ACTIVATE_DRIVER_CMD),
             open: Some(panes::EXTENSIONS),
+            copy: None,
             verifies: Some(checks::DRIVER),
         },
         WizardStep {
@@ -101,6 +107,7 @@ pub fn steps() -> Vec<WizardStep> {
                           Karabiner-Elements or your own plist already manages it).",
             run: None,
             open: None,
+            copy: Some("sudo kanatactl install"),
             verifies: Some(checks::VHID_MANAGED),
         },
         WizardStep {
@@ -113,6 +120,7 @@ pub fn steps() -> Vec<WizardStep> {
                           re-add (+) both entries (kanata updates don't affect them).",
             run: None,
             open: Some(panes::INPUT_MONITORING),
+            copy: None,
             verifies: Some(checks::INPUT_MONITORING),
         },
         WizardStep {
@@ -121,6 +129,7 @@ pub fn steps() -> Vec<WizardStep> {
                           `sudo kanatactl install` in Terminal.",
             run: None,
             open: None,
+            copy: Some("sudo kanatactl install"),
             verifies: Some(checks::DAEMON),
         },
         WizardStep {
@@ -128,9 +137,20 @@ pub fn steps() -> Vec<WizardStep> {
             instruction: "Run doctor — every check should be green.",
             run: None,
             open: None,
+            copy: None,
             verifies: None,
         },
     ]
+}
+
+/// The wizard step (index into [`steps`]) that fixes a given doctor check —
+/// the *inverted* `verifies` mapping. This is how the doctor window delegates
+/// a setup-class failure to the wizard ("Open Setup Assistant at this step",
+/// SPEC §11.3 tier 2 / the §11 [HARD] anti-overlap rule).
+pub fn step_index_for_check(check_name: &str) -> Option<usize> {
+    steps()
+        .iter()
+        .position(|step| step.verifies == Some(check_name))
 }
 
 /// The doctor check whose wizard step fixes a given runtime degradation, when
@@ -287,6 +307,35 @@ mod tests {
         assert_eq!(
             first_unsatisfied(&checks, Some(DegradedReason::RetryBudgetExhausted)),
             None
+        );
+    }
+
+    #[test]
+    fn every_setup_check_maps_back_to_a_step() {
+        // The doctor window's delegation relies on the inversion covering
+        // every setup-class check (SPEC §11.1/§11.3).
+        for name in kanatabar_core::doctor::SETUP_CHECKS {
+            let idx = step_index_for_check(name)
+                .unwrap_or_else(|| panic!("setup check {name} has no wizard step"));
+            assert_eq!(steps()[idx].verifies, Some(name));
+        }
+        assert_eq!(step_index_for_check("no such check"), None);
+    }
+
+    #[test]
+    fn sudo_steps_carry_a_copyable_command_and_never_a_run() {
+        // SPEC §11.2 [HARD]: the tray never elevates — anything needing sudo
+        // is copyable text, and a step that runs something never needs sudo.
+        for step in steps() {
+            if let Some(copy) = step.copy {
+                assert!(copy.starts_with("sudo "), "copy is for sudo commands");
+                assert!(step.run.is_none(), "{:?} both runs and copies", step.title);
+            }
+        }
+        let installs: Vec<&str> = steps().iter().filter_map(|s| s.copy).collect();
+        assert_eq!(
+            installs,
+            ["sudo kanatactl install", "sudo kanatactl install"]
         );
     }
 

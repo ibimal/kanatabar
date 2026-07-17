@@ -17,16 +17,22 @@
 //! - [`single_instance`] — the per-user single-instance lock.
 //! - [`wizard`] — the first-run setup-wizard step model (SPEC §11).
 //! - [`devwin`] — the devices-window view-model (SPEC §8, Phase 12).
+//! - [`healthwin`] — the Health-Check-window view-model (SPEC §11.3).
+//! - [`wizardwin`] — the Setup-Assistant-window view-model (SPEC §11.2).
+//! - [`pages`] — the page↔shell ipc protocol parser (Phase 12).
 
 pub mod conn;
 pub mod devwin;
 pub mod ffi;
+pub mod healthwin;
 pub mod icons;
 pub mod login;
 pub mod menu;
 pub mod model;
 pub mod notify;
+pub mod pages;
 pub mod reconnect;
 pub mod session;
 pub mod single_instance;
 pub mod wizard;
+pub mod wizardwin;

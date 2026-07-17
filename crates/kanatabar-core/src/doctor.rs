@@ -66,6 +66,34 @@ pub const ALL_CHECKS: [&str; 12] = [
     checks::SUPERVISOR,
 ];
 
+/// The setup-class checks (SPEC §11.1): the wizard owns their fix, and the
+/// doctor window delegates their failures to it ([HARD] anti-overlap rule).
+/// Everything else in [`ALL_CHECKS`] is runtime-class (doctor-only).
+pub const SETUP_CHECKS: [&str; 6] = [
+    checks::DRIVER_PRESENT,
+    checks::DRIVER_VERSION,
+    checks::DRIVER,
+    checks::VHID_MANAGED,
+    checks::INPUT_MONITORING,
+    checks::DAEMON,
+];
+
+/// Whether `name` is a setup-class check (SPEC §11.1).
+pub fn is_setup_check(name: &str) -> bool {
+    SETUP_CHECKS.contains(&name)
+}
+
+/// Setup is complete ⇔ every setup-class check passes (SPEC §11.1). Drives
+/// the wizard's auto-open (and never-auto-open-again) behavior. Checks absent
+/// from the report don't count as failing — a partial report (e.g. daemon
+/// unreachable produces only the daemon check) still evaluates honestly.
+pub fn setup_complete(checks: &[DoctorCheck]) -> bool {
+    checks
+        .iter()
+        .filter(|c| is_setup_check(&c.name))
+        .all(|c| c.ok)
+}
+
 /// True when every check passed — the overall doctor verdict (SPEC §9 exit
 /// codes: 0 when all green).
 pub fn all_ok(checks: &[DoctorCheck]) -> bool {
@@ -163,6 +191,45 @@ mod tests {
     fn failed_count_counts_failures() {
         assert_eq!(failed_count(&[check("a", true), check("b", false)]), 1);
         assert_eq!(failed_count(&[check("a", false), check("b", false)]), 2);
+    }
+
+    #[test]
+    fn setup_checks_are_a_subset_of_all_checks_and_classify() {
+        for name in SETUP_CHECKS {
+            assert!(ALL_CHECKS.contains(&name), "unknown setup check {name}");
+            assert!(is_setup_check(name));
+        }
+        // Runtime-class = the complement; spot-check the split (SPEC §11.1).
+        for name in [
+            checks::KANATA_BINARY,
+            checks::VHID_DAEMON,
+            checks::CONTROL_SOCKET,
+            checks::ACTIVE_CONFIG,
+            checks::CONFIG_FILE,
+            checks::SUPERVISOR,
+        ] {
+            assert!(!is_setup_check(name), "{name} must be runtime-class");
+        }
+    }
+
+    #[test]
+    fn setup_complete_ignores_runtime_failures() {
+        // A broken active config is runtime-class: setup stays complete.
+        let mut all: Vec<DoctorCheck> = ALL_CHECKS.map(|n| check(n, true)).to_vec();
+        assert!(setup_complete(&all));
+        all.iter_mut()
+            .find(|c| c.name == checks::ACTIVE_CONFIG)
+            .expect("present")
+            .ok = false;
+        assert!(setup_complete(&all), "runtime failure is not a setup gap");
+        // But any setup-class failure flips it.
+        all.iter_mut()
+            .find(|c| c.name == checks::INPUT_MONITORING)
+            .expect("present")
+            .ok = false;
+        assert!(!setup_complete(&all));
+        // Vacuously complete on an empty report (partial reports stay honest).
+        assert!(setup_complete(&[]));
     }
 
     #[test]
