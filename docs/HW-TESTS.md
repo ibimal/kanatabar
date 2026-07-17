@@ -1313,7 +1313,13 @@ fallback firing IS a finding (ledger #17).
   `MATCHED` pill; unmatched rows show a gray dot. Devices with no product
   string show as a dimmed italic "Unnamed device" (sorted last) in the window
   and "Unnamed device" in the CLI — never a blank row/line (finding fixed
-  2026-07-17: two nameless IOHID devices rendered blank in both).
+  2026-07-17: two nameless IOHID devices rendered blank in both). The
+  built-in keyboard ("Apple Internal Keyboard / Trackpad") must show
+  `MATCHED` (second 2026-07-17 finding, fixed: composite devices present
+  several HID nodes under one product name and last-writer-wins in the
+  registry made `matched` enumeration-order luck; any keyboard node now
+  wins). Reminder: `matched` = "a keyboard kanata would grab", the honest
+  approximation — kanata does not expose its live grab list.
 * [ ] **Hotplug refreshes in place** — window open: plug, then unplug, the
   spare USB keyboard.
   **Expect:** the list updates by itself within \~1s each time (no re-open,
@@ -1324,6 +1330,13 @@ fallback firing IS a finding (ledger #17).
   fresh list (a fetch fires on show).
 * [ ] **Close = hide, re-open instant** — close, re-open from the menu.
   **Expect:** instant re-appearance (no reload flash), same scroll position.
+* [ ] **Window fits its content** — open with a short device list.
+  **Expect:** the window height hugs the list (no sheet of empty canvas
+  below the card; canvas margin only), clamped ≥240 / ≤600 logical px;
+  hotplug while open grows/shrinks the window by about a row.
+* [ ] **A manual resize wins** — drag the window taller, then hotplug.
+  **Expect:** the window keeps YOUR size (no snap-back on refresh); after
+  close → re-open, content-fit resumes.
 * [ ] **Dark/light** — toggle System Settings → Appearance with the window
   open.
   **Expect:** the window follows live (canvas/card/text/badge all flip; no

@@ -36,11 +36,13 @@
   box-sizing: border-box;
 }
 
-html,
-body {
+html {
   height: 100%;
 }
 
+/* Natural content height (the shell fits the window to it, docs/design/
+   phase12-ui-layer.md); min-height keeps the canvas painted when the
+   window is taller than the content. */
 body {
   font: 13px/1.45 -apple-system, system-ui, sans-serif;
   background: var(--bg);
@@ -49,8 +51,7 @@ body {
   user-select: none;
   cursor: default;
   padding: 16px;
-  display: flex;
-  flex-direction: column;
+  min-height: 100%;
 }
 
 header {
@@ -58,7 +59,6 @@ header {
   align-items: center;
   gap: 12px;
   margin-bottom: 14px;
-  flex: none;
 }
 
 header img {
@@ -76,12 +76,12 @@ header p {
   color: var(--text-secondary);
 }
 
+/* Cards hug their content; the canvas shows beneath (System-Settings-like). */
 .card {
   background: var(--card);
   border: 1px solid var(--separator);
   border-radius: 10px;
-  overflow: hidden auto;
-  flex: 1;
+  overflow: hidden;
 }
 
 .row {

@@ -48,6 +48,9 @@ enum UserEvent {
     DevicesPageReady,
     /// Hotplug: re-fetch the device list if the window is showing.
     DevicesChanged,
+    /// The devices page reported its content height (logical px) for the
+    /// shell's window fit.
+    DevicesContentHeight(f64),
 }
 
 /// Resolve the control-socket path (SPEC §3.2), overridable for dev/test.
@@ -187,6 +190,11 @@ fn main() -> Result<()> {
                         match ShellWindow::devices(target, move |message| {
                             if message == "ready" {
                                 let _ = proxy.send_event(UserEvent::DevicesPageReady);
+                            } else if let Some(height) = message
+                                .strip_prefix("height:")
+                                .and_then(|v| v.parse::<f64>().ok())
+                            {
+                                let _ = proxy.send_event(UserEvent::DevicesContentHeight(height));
                             }
                         }) {
                             Ok(window) => devices_window = Some(window),
@@ -195,7 +203,7 @@ fn main() -> Result<()> {
                             }
                         }
                     }
-                    match devices_window.as_ref() {
+                    match devices_window.as_mut() {
                         Some(window) => {
                             window.show();
                             fetch_devices_for_window(
@@ -247,6 +255,11 @@ fn main() -> Result<()> {
                     window.page_ready();
                 }
             }
+            Event::UserEvent(UserEvent::DevicesContentHeight(height)) => {
+                if let Some(window) = devices_window.as_mut() {
+                    window.fit_content_height(height);
+                }
+            }
             Event::UserEvent(UserEvent::DevicesChanged) => {
                 // Hotplug while the window is showing: refresh in place
                 // (SPEC §8). Hidden windows don't fetch.
@@ -263,6 +276,19 @@ fn main() -> Result<()> {
                 if let Some(window) = devices_window.as_ref() {
                     if window.id() == window_id {
                         window.hide();
+                    }
+                }
+            }
+            Event::WindowEvent {
+                window_id,
+                event: WindowEvent::Resized(size),
+                ..
+            } => {
+                // Content-fit bookkeeping: a user drag disables fitting
+                // until the window is next shown.
+                if let Some(window) = devices_window.as_mut() {
+                    if window.id() == window_id {
+                        window.handle_resized(size);
                     }
                 }
             }

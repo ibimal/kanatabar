@@ -65,7 +65,18 @@ impl DeviceRegistry {
         let mut map = self.lock();
         match change {
             DeviceChange::Added => {
-                map.insert(Self::key(descriptor), descriptor.clone());
+                // Composite devices present several HID nodes under one
+                // product name, all sharing this key (HW Run 6: Keychron K3
+                // Pro = 3 nodes; Run 10: "Apple Internal Keyboard / Trackpad"
+                // showed unmatched). Last-writer-wins made `matched`
+                // enumeration-order luck — keep the keyboard node's
+                // descriptor, so `matched` means "any node is a keyboard".
+                let entry = map
+                    .entry(Self::key(descriptor))
+                    .or_insert_with(|| descriptor.clone());
+                if is_resync_relevant(DeviceChange::Added, descriptor) {
+                    *entry = descriptor.clone();
+                }
             }
             DeviceChange::Removed => {
                 map.remove(&Self::key(descriptor));

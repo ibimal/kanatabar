@@ -270,6 +270,51 @@ async fn initial_devices_fill_registry_without_restarting() {
     h.stop().await;
 }
 
+/// Composite devices present several HID nodes under one product name (HW
+/// Run 6: Keychron K3 Pro = 3 nodes; HW Run 10 finding: "Apple Internal
+/// Keyboard / Trackpad" showed unmatched). The registry must classify the
+/// device as matched when ANY node is a keyboard — in either enumeration
+/// order, and still as one row.
+#[test]
+fn composite_device_is_matched_whichever_node_enumerates_last() {
+    let node = |page, usage| DeviceDescriptor {
+        name: "Apple Internal Keyboard / Trackpad".into(),
+        vendor_id: Some(0x05AC),
+        usage_page: Some(page),
+        usage: Some(usage),
+    };
+    let keyboard_node = node(0x01, 0x06);
+    let trackpad_node = node(0x01, 0x05); // pointer: not resync-relevant
+    let vendor_node = DeviceDescriptor {
+        usage_page: None,
+        usage: None,
+        ..keyboard_node.clone()
+    };
+
+    for order in [
+        [&keyboard_node, &trackpad_node, &vendor_node],
+        [&trackpad_node, &vendor_node, &keyboard_node],
+        [&vendor_node, &keyboard_node, &trackpad_node],
+    ] {
+        let registry = device::DeviceRegistry::default();
+        for descriptor in order {
+            registry.apply(DeviceChange::Added, descriptor);
+        }
+        let devices = registry.snapshot();
+        assert_eq!(devices.len(), 1, "one row per physical device");
+        assert!(
+            devices[0].matched,
+            "keyboard node must win regardless of order: {devices:?}"
+        );
+    }
+
+    // A device with no keyboard node anywhere stays unmatched.
+    let registry = device::DeviceRegistry::default();
+    registry.apply(DeviceChange::Added, &trackpad_node);
+    registry.apply(DeviceChange::Added, &vendor_node);
+    assert!(!registry.snapshot()[0].matched);
+}
+
 /// A relevant hotplug updates the registry AND pushes Event::DeviceChanged to
 /// the bus (SPEC §7.2); removal takes it out of the registry again.
 #[tokio::test]

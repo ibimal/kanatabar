@@ -14,6 +14,7 @@
 </style>
 </head>
 <body>
+<main id="content">
 <header>
   <img src="kbasset://app/icon.png" alt="">
   <div>
@@ -24,6 +25,7 @@
 <div class="card" id="list">
   <div class="empty">Waiting for the daemon…</div>
 </div>
+</main>
 <script>
 "use strict";
 function el(tag, cls, text) {
@@ -31,6 +33,15 @@ function el(tag, cls, text) {
   if (cls) node.className = cls;
   if (text !== undefined) node.textContent = text;
   return node;
+}
+/* Report the natural content height (content + body padding) so the shell
+   can fit the window to it — sent after layout settles. */
+function postHeight() {
+  if (!window.ipc) return;
+  requestAnimationFrame(() => {
+    const content = document.getElementById("content").offsetHeight;
+    window.ipc.postMessage("height:" + Math.ceil(content + 32));
+  });
 }
 /* Called from Rust via evaluate_script with the serde-serialized
    devwin::DevicesView (shape pinned by the lib's view_json_shape test). */
@@ -40,19 +51,18 @@ window.__render = (view) => {
   list.replaceChildren();
   if (view.error) {
     list.appendChild(el("div", "error", view.error));
-    return;
-  }
-  if (!view.rows.length) {
+  } else if (!view.rows.length) {
     list.appendChild(el("div", "empty", "No input devices are visible."));
-    return;
+  } else {
+    for (const row of view.rows) {
+      const r = el("div", "row");
+      r.appendChild(el("span", "dot" + (row.matched ? " on" : "")));
+      r.appendChild(el("span", "name" + (row.unnamed ? " dim" : ""), row.name));
+      if (row.matched) r.appendChild(el("span", "badge", "MATCHED"));
+      list.appendChild(r);
+    }
   }
-  for (const row of view.rows) {
-    const r = el("div", "row");
-    r.appendChild(el("span", "dot" + (row.matched ? " on" : "")));
-    r.appendChild(el("span", "name" + (row.unnamed ? " dim" : ""), row.name));
-    if (row.matched) r.appendChild(el("span", "badge", "MATCHED"));
-    list.appendChild(r);
-  }
+  postHeight();
 };
 /* Tell the shell the page can render; it replies with the latest view, which
    closes the load-vs-first-push race without polling. (Guarded so the page
