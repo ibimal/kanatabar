@@ -227,3 +227,15 @@ button:active {
   -webkit-user-select: text;
   user-select: text;
 }
+
+/* The completion panel's command chip sits under the message, in normal
+   text color (the panel itself is green) — the copied flash still wins. */
+.success .code {
+  margin-top: 8px;
+  display: inline-block;
+  color: var(--text);
+}
+
+.success .code.copied {
+  color: var(--ok);
+}

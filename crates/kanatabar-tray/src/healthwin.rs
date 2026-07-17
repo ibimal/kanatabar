@@ -32,10 +32,43 @@ pub struct HealthView {
     pub report: Vec<DoctorCheck>,
 }
 
+/// Display label for a check row: sentence case with proper nouns intact
+/// (Apple HIG: labels are sentence case; "VHID"/"Input Monitoring" are
+/// names, not words). Presentation-only — the wire names in
+/// `kanatabar_core::doctor::checks` are a stable contract and the copyable
+/// report keeps them raw.
+fn display_label(name: &str) -> String {
+    use kanatabar_core::doctor::checks;
+    match name {
+        checks::DAEMON => "Daemon",
+        checks::KANATA_BINARY => "Kanata binary",
+        checks::DRIVER_PRESENT => "Driver present",
+        checks::DRIVER => "Karabiner driver",
+        checks::DRIVER_VERSION => "Driver version",
+        checks::VHID_DAEMON => "VHID daemon",
+        checks::VHID_MANAGED => "VHID daemon managed",
+        checks::INPUT_MONITORING => "Input Monitoring",
+        checks::CONTROL_SOCKET => "Control socket",
+        checks::ACTIVE_CONFIG => "Active config",
+        checks::CONFIG_FILE => "Config file",
+        checks::SUPERVISOR => "Supervisor",
+        // Unknown (a newer daemon): capitalize the first letter.
+        other => {
+            let mut chars = other.chars();
+            return match chars.next() {
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                None => String::new(),
+            };
+        }
+    }
+    .to_string()
+}
+
 /// One check row.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct CheckRow {
-    /// Stable check name (`kanatabar_core::doctor::checks`).
+    /// Display label (sentence case; see [`display_label`]). The stable wire
+    /// name stays in `report`.
     pub name: String,
     /// Did the check pass?
     pub ok: bool,
@@ -54,7 +87,7 @@ pub fn view(checks: &[DoctorCheck]) -> HealthView {
     let rows: Vec<CheckRow> = checks
         .iter()
         .map(|c| CheckRow {
-            name: c.name.clone(),
+            name: display_label(&c.name),
             ok: c.ok,
             detail: c.detail.clone(),
             fix_hint: c.fix_hint.clone(),
@@ -108,7 +141,12 @@ mod tests {
             check(checks::ACTIVE_CONFIG, false), // runtime-class → hint only
             check(checks::DAEMON, true),         // passing setup → no action
         ]);
-        let by_name = |n: &str| view.rows.iter().find(|r| r.name == n).expect("row");
+        let by_name = |n: &str| {
+            view.rows
+                .iter()
+                .find(|r| r.name == display_label(n))
+                .expect("row")
+        };
         let step = by_name(checks::DRIVER).wizard_step.expect("delegates");
         assert_eq!(
             wizard::steps()[step].verifies,
@@ -132,6 +170,30 @@ mod tests {
         assert_eq!(view.report, checks);
     }
 
+    /// Every known check gets a real display label (sentence case; wire names
+    /// stay raw in `report`), and unknown names degrade to first-letter
+    /// capitalization instead of vanishing.
+    #[test]
+    fn every_check_has_a_capitalized_display_label() {
+        for name in ALL_CHECKS {
+            let label = display_label(name);
+            let first = label.chars().next().expect("non-empty label");
+            assert!(
+                first.is_uppercase(),
+                "label for {name:?} starts lowercase: {label:?}"
+            );
+            assert!(
+                !label.contains("  "),
+                "label for {name:?} has glued spaces: {label:?}"
+            );
+        }
+        assert_eq!(display_label(checks::VHID_DAEMON), "VHID daemon");
+        assert_eq!(display_label(checks::INPUT_MONITORING), "Input Monitoring");
+        // A check from a newer daemon still renders reasonably.
+        assert_eq!(display_label("future check"), "Future check");
+        assert_eq!(display_label(""), "");
+    }
+
     #[test]
     fn error_view_carries_the_message_and_no_rows() {
         let view = error("connect failed");
@@ -152,7 +214,7 @@ mod tests {
                 "all_ok": false,
                 "error": null,
                 "rows": [{
-                    "name": "karabiner driver",
+                    "name": "Karabiner driver",
                     "ok": false,
                     "detail": "detail",
                     "fix_hint": "fix it",

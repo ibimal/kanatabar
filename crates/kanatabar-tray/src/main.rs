@@ -528,11 +528,11 @@ async fn fetch_wizard_view(socket: &std::path::Path, proxy: &EventLoopProxy<User
         .ok()
         .and_then(|status| status.degraded_reason);
     let completion = if wizard::first_unsatisfied(&checks, degraded).is_none() {
-        Some(wizard_completion(socket).await.1)
+        Some(wizard_completion_window(socket).await)
     } else {
         None
     };
-    let view = wizardwin::view(&checks, degraded, completion.as_deref());
+    let view = wizardwin::view(&checks, degraded, completion);
     let _ = proxy.send_event(UserEvent::WizardData(Box::new(view)));
 }
 
@@ -721,6 +721,54 @@ async fn wizard_completion(socket: &std::path::Path) -> (String, String) {
                 .to_string(),
         )
     }
+}
+
+/// The wizard *window*'s terminal panel: same preset-aware logic as
+/// [`wizard_completion`] (which stays for the notification fallback, where
+/// there is no UI to copy from), but structured — the command renders as a
+/// click-to-copy chip instead of being glued into prose, and shown paths are
+/// `~`-abbreviated.
+async fn wizard_completion_window(socket: &std::path::Path) -> wizardwin::Completion {
+    let has_preset = conn::fetch_presets_once(socket)
+        .await
+        .map(|p| !p.is_empty())
+        .unwrap_or(true); // on error, don't nag — assume set up
+    if has_preset {
+        return wizardwin::Completion {
+            message: "All checks passed — you're set up.".to_string(),
+            command: None,
+        };
+    }
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let found = home
+        .as_deref()
+        .map(existing_kanata_configs)
+        .unwrap_or_default();
+    if let Some(first) = found.first() {
+        let name = first.file_stem().and_then(|s| s.to_str()).unwrap_or("main");
+        wizardwin::Completion {
+            message: "All checks passed. Found your kanata config — add it as a preset to \
+                      start remapping:"
+                .to_string(),
+            command: Some(format!(
+                "kanatactl preset add {name} {}",
+                tilde_abbrev(first, home.as_deref())
+            )),
+        }
+    } else {
+        wizardwin::Completion {
+            message: "All checks passed. Add a preset to start remapping:".to_string(),
+            command: Some("kanatactl preset add <name> <path/to.kbd>".to_string()),
+        }
+    }
+}
+
+/// Abbreviate a path under `home` to `~/…` for display (commands stay valid —
+/// the shell expands `~`).
+fn tilde_abbrev(path: &std::path::Path, home: Option<&std::path::Path>) -> String {
+    home.and_then(|home| path.strip_prefix(home).ok())
+        .map(|rest| format!("~/{}", rest.display()))
+        .unwrap_or_else(|| path.display().to_string())
 }
 
 /// The `.kbd` files in the user's `~/.config/kanata`, sorted. Empty when the

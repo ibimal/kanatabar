@@ -27,11 +27,22 @@ pub struct WizardView {
     pub summary: String,
     /// Every checked step is satisfied — the goal state.
     pub done: bool,
-    /// Completion message (only when `done`; the caller supplies it because
-    /// it may involve a preset lookup — `wizard_completion` in the shell).
-    pub completion: Option<String>,
+    /// Completion panel (only when `done`; the caller supplies it because it
+    /// may involve a preset lookup — `wizard_completion_window` in the shell).
+    pub completion: Option<Completion>,
     /// Step rows, in wizard order.
     pub rows: Vec<StepRow>,
+}
+
+/// The completion panel: a message plus an optional command the *user* runs,
+/// rendered as a copyable code chip (same affordance as sudo steps — the
+/// page never glues the command into prose).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Completion {
+    /// Congratulation / next-step message.
+    pub message: String,
+    /// A `kanatactl preset add …` command to copy, when there is a next step.
+    pub command: Option<String>,
 }
 
 /// How a step renders.
@@ -75,7 +86,7 @@ pub struct StepRow {
 pub fn view(
     checks: &[DoctorCheck],
     degraded: Option<DegradedReason>,
-    completion: Option<&str>,
+    completion: Option<Completion>,
 ) -> WizardView {
     let steps = wizard::steps();
     let current = wizard::first_unsatisfied(checks, degraded)
@@ -103,9 +114,10 @@ pub fn view(
         },
         done,
         completion: done.then(|| {
-            completion
-                .unwrap_or("All checks passed — you're set up.")
-                .to_string()
+            completion.unwrap_or_else(|| Completion {
+                message: "All checks passed — you're set up.".to_string(),
+                command: None,
+            })
         }),
         rows,
     }
@@ -213,15 +225,25 @@ mod tests {
             StepState::Current,
             "grant step current"
         );
-        // Truly done: every row Done, completion message rendered.
-        let view_done = view(&all_green, None, Some("Add a preset to start."));
+        // Truly done: every row Done, the supplied completion rendered.
+        let supplied = Completion {
+            message: "Add a preset to start.".to_string(),
+            command: Some("kanatactl preset add main ~/.config/kanata/main.kbd".to_string()),
+        };
+        let view_done = view(&all_green, None, Some(supplied.clone()));
         assert!(view_done.done);
         assert_eq!(view_done.summary, "Setup complete");
-        assert_eq!(
-            view_done.completion.as_deref(),
-            Some("Add a preset to start.")
-        );
+        assert_eq!(view_done.completion, Some(supplied));
         assert!(view_done.rows.iter().all(|r| r.state == StepState::Done));
+        // Done with no caller-supplied completion: the default message, no chip.
+        let view_default = view(&all_green, None, None);
+        assert_eq!(
+            view_default.completion,
+            Some(Completion {
+                message: "All checks passed — you're set up.".to_string(),
+                command: None,
+            })
+        );
     }
 
     #[test]
@@ -260,5 +282,24 @@ mod tests {
         );
         assert_eq!(json["rows"][0]["state"], "done");
         assert_eq!(json["rows"][4]["state"], "pending");
+
+        // Completion object shape (rendered as message + copyable chip).
+        let all_green: Vec<DoctorCheck> = ALL_CHECKS.map(|n| check(n, true)).to_vec();
+        let done = serde_json::to_value(view(
+            &all_green,
+            None,
+            Some(Completion {
+                message: "msg".to_string(),
+                command: Some("kanatactl preset add a b".to_string()),
+            }),
+        ))
+        .expect("serializes");
+        assert_eq!(
+            done["completion"],
+            serde_json::json!({
+                "message": "msg",
+                "command": "kanatactl preset add a b",
+            })
+        );
     }
 }

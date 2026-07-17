@@ -72,6 +72,18 @@ function postHeight() {
 function post(msg) {
   if (window.ipc) window.ipc.postMessage(msg);
 }
+/* Copyable command chip (sudo steps, completion): click copies, brief flash. */
+function copyChip(cmd) {
+  const code = el("span", "code", cmd);
+  code.title = "Click to copy";
+  code.addEventListener("click", () => {
+    navigator.clipboard.writeText(cmd).then(() => {
+      code.classList.add("copied");
+      setTimeout(() => code.classList.remove("copied"), 1200);
+    });
+  });
+  return code;
+}
 /* Called from Rust via evaluate_script with the serde-serialized
    wizardwin::WizardView (shape pinned by the lib's view_json_shape test). */
 window.__render = (view) => {
@@ -98,17 +110,7 @@ window.__render = (view) => {
         open.addEventListener("click", () => post("open:" + row.index));
         actions.appendChild(open);
       }
-      if (row.copy) {
-        const code = el("span", "code", row.copy);
-        code.title = "Click to copy";
-        code.addEventListener("click", () => {
-          navigator.clipboard.writeText(row.copy).then(() => {
-            code.classList.add("copied");
-            setTimeout(() => code.classList.remove("copied"), 1200);
-          });
-        });
-        actions.appendChild(code);
-      }
+      if (row.copy) actions.appendChild(copyChip(row.copy));
       if (actions.childNodes.length) text.appendChild(actions);
     }
     r.appendChild(text);
@@ -116,7 +118,13 @@ window.__render = (view) => {
   }
   const completion = document.getElementById("completion");
   completion.hidden = !view.completion;
-  completion.textContent = view.completion || "";
+  completion.replaceChildren();
+  if (view.completion) {
+    completion.appendChild(el("div", undefined, view.completion.message));
+    if (view.completion.command) {
+      completion.appendChild(copyChip(view.completion.command));
+    }
+  }
   postHeight();
 };
 window.addEventListener("keydown", (e) => {
