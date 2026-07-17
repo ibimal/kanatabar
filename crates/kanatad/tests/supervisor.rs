@@ -286,6 +286,7 @@ fn graceful_sigterm_persists_state_and_logs_transitions() {
         .arg(&state_dir)
         .env("KANATABAR_SOCK", &socket)
         .env("KANATABAR_SKIP_DRIVER_CHECK", "true")
+        .env("KANATABAR_SKIP_PERMISSION_CHECK", "true")
         .env("RUST_LOG", "info")
         .stderr(std::process::Stdio::piped())
         .spawn()

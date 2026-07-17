@@ -102,10 +102,11 @@ Non-goals: Linux/Windows; reimplementing remapping; a config *editor* GUI (open 
   the grant *database* cannot be read — but kanatad **can** read its **own** grant via the
   public per-process APIs (`IOHIDCheckAccess` for Input Monitoring, `AXIsProcessTrusted` for
   Accessibility), which the doctor now does (kanatad is the responsible process, so its own
-  grant is the one that matters). Policy is conservative pending HW confirmation of the
-  daemon-context read (docs/HW-TESTS.md): a definitive Input-Monitoring `Denied` fails the
-  check, an indeterminate/untrusted read stays informational, and the runtime backstop
-  remains behavioral — a denied kanata dies
+  grant is the one that matters). **HW-verified 2026-07-17 (docs/HW-TESTS.md #19):** the
+  daemon-context read is accurate both ways, so not-granted fails the check (red). **A grant
+  takes effect only after the daemon restarts** — a running process caches its launch-time
+  TCC decision — so re-granting must be followed by a daemon restart. The runtime backstop
+  is still kept as belt-and-suspenders — a denied kanata dies
   with "kanata needs macOS Input Monitoring permission" (v1.12; older releases:
   `privilege violation`, kanata#1037), which the supervisor classifies from the child's
   output into `Degraded{InputMonitoringDenied}` — an actionable message, never a futile

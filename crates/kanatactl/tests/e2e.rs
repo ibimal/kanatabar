@@ -102,6 +102,7 @@ fn cli_round_trips_against_daemon_and_mock() {
             .env("KANATABAR_STATE", &state)
             // No real Karabiner driver in CI; skip the driver preflight (§6.5).
             .env("KANATABAR_SKIP_DRIVER_CHECK", "true")
+            .env("KANATABAR_SKIP_PERMISSION_CHECK", "true")
             .env("RUST_LOG", "warn")
             .stderr(std::process::Stdio::null())
             .spawn()
@@ -171,6 +172,7 @@ fn logs_devices_config_and_presets_round_trip() {
             .env("KANATABAR_KANATA_BIN", bin("mock-kanata"))
             .env("KANATABAR_STATE", &state)
             .env("KANATABAR_SKIP_DRIVER_CHECK", "true")
+            .env("KANATABAR_SKIP_PERMISSION_CHECK", "true")
             // The ring mirrors the log filter: keep info-level so it has content.
             .env("RUST_LOG", "info")
             .stderr(std::process::Stdio::null())

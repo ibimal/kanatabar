@@ -111,6 +111,7 @@ fn doctor_reports_a_stable_all_green_report_against_the_mock() {
             .env("KANATABAR_KANATA_BIN", bin("mock-kanata"))
             .env("KANATABAR_STATE", &state)
             .env("KANATABAR_SKIP_DRIVER_CHECK", "true")
+            .env("KANATABAR_SKIP_PERMISSION_CHECK", "true")
             .env("RUST_LOG", "warn")
             .stderr(std::process::Stdio::null())
             .spawn()

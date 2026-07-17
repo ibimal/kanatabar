@@ -356,20 +356,34 @@ const GRANT_HINT_TAIL: &str = "add it with the + button (Cmd+Shift+G types the p
      self-registered entry is NOT the one checked. After updating KanataBar, remove (−) \
      and re-add (+) the entry (kanata updates don't affect it)";
 
+/// Test/CI escape hatch (mirrors `--skip-driver-check`): a real TCC read only
+/// reflects a grant when kanatad runs as the root LaunchDaemon, which `cargo
+/// test` can't provide, so tests set `KANATABAR_SKIP_PERMISSION_CHECK` to keep
+/// the permission checks green. Never set in production.
+fn skip_permission_checks() -> bool {
+    std::env::var_os("KANATABAR_SKIP_PERMISSION_CHECK").is_some()
+}
+
+const PERMISSION_SKIPPED: &str = "skipped (permission preflight disabled)";
+
 /// Input Monitoring grant for kanatad, read from the daemon's **own** access
-/// via `IOHIDCheckAccess` (SPEC §9, §11 [VERIFY]). The grants that govern
-/// kanata's device access attach to kanatad (the launchd job is the TCC
-/// responsible process — SPEC §2 [HARD, verified 2026-07-11]); the doctor
-/// runs in-process here, so it reads the grant that actually matters.
+/// via `IOHIDCheckAccess` (SPEC §9, §11). The grants that govern kanata's
+/// device access attach to kanatad (the launchd job is the TCC responsible
+/// process — SPEC §2 [HARD]); the doctor runs in-process here, so it reads the
+/// grant that actually matters.
 ///
-/// Conservative mapping (the daemon-context read is **HW-pending**,
-/// docs/HW-TESTS.md): a definitive `Denied` fails the check; `Granted` passes
-/// with a verified note; `Unknown` stays informational-OK — there the
-/// behavioral backstop remains the source of truth (a denied kanata dies at
-/// startup → `Degraded{InputMonitoringDenied}`, §6.5), so a daemon-context
-/// quirk can never false-red a working setup.
+/// The daemon-context read is **HW-confirmed** (docs/HW-TESTS.md #19,
+/// 2026-07-17): a granted daemon reads `Granted`, an un/stale-granted one
+/// reads `Denied`. So both `Denied` and `Unknown` (never granted) fail the
+/// check honestly; only `Granted` passes. Note a grant takes effect only
+/// after the daemon restarts (a process caches its launch-time TCC decision),
+/// so this stays red until then even after the user toggles the pane — which
+/// is correct, since remapping is genuinely broken until the restart.
 fn input_monitoring_check() -> DoctorCheck {
     use crate::ffi::tcc::{self, AccessStatus};
+    if skip_permission_checks() {
+        return ok(checks::INPUT_MONITORING, PERMISSION_SKIPPED);
+    }
     let hint = format!(
         "grant Input Monitoring to {} in System Settings → Privacy & Security → \
          Input Monitoring — {GRANT_HINT_TAIL}",
@@ -385,28 +399,24 @@ fn input_monitoring_check() -> DoctorCheck {
             "denied — kanatad is not permitted to monitor input",
             hint,
         ),
-        AccessStatus::Unknown => DoctorCheck {
-            name: checks::INPUT_MONITORING.to_string(),
-            ok: true,
-            detail: "not yet determined (the grant read is indeterminate here); a denial \
-                     is caught at kanata startup and reported as Degraded"
-                .to_string(),
-            fix_hint: Some(hint),
-        },
+        AccessStatus::Unknown => fail(
+            checks::INPUT_MONITORING,
+            "not granted — kanatad has no Input Monitoring grant",
+            hint,
+        ),
     }
 }
 
 /// Accessibility grant for kanatad, read from the daemon's **own** trust
-/// state via `AXIsProcessTrusted` (SPEC §9, §11 [VERIFY]). macOS requires
-/// BOTH this and Input Monitoring; surfacing them as separate checks lets the
-/// wizard guide each grant independently.
-///
-/// `AXIsProcessTrusted` is boolean (no indeterminate state), so pre-HW we
-/// stay conservative: `trusted` passes with a verified note; not-trusted
-/// stays informational-OK rather than a hard red, so a daemon-context quirk
-/// can't false-red a working setup. Flip not-trusted → `fail` once the
-/// daemon-context read is HW-confirmed (docs/HW-TESTS.md).
+/// state via `AXIsProcessTrusted` (SPEC §9, §11). macOS requires BOTH this and
+/// Input Monitoring; surfacing them as separate checks lets the wizard guide
+/// each grant independently. HW-confirmed alongside Input Monitoring
+/// (docs/HW-TESTS.md #19): `trusted` passes, not-trusted fails. Same
+/// restart-to-take-effect caveat as [`input_monitoring_check`].
 fn accessibility_check() -> DoctorCheck {
+    if skip_permission_checks() {
+        return ok(checks::ACCESSIBILITY, PERMISSION_SKIPPED);
+    }
     let hint = format!(
         "grant Accessibility to {} in System Settings → Privacy & Security → \
          Accessibility — {GRANT_HINT_TAIL}",
@@ -418,14 +428,11 @@ fn accessibility_check() -> DoctorCheck {
             "granted (verified via AXIsProcessTrusted)",
         )
     } else {
-        DoctorCheck {
-            name: checks::ACCESSIBILITY.to_string(),
-            ok: true,
-            detail: "not verified from the daemon context (HW-pending); a denial surfaces \
-                     at kanata startup"
-                .to_string(),
-            fix_hint: Some(hint),
-        }
+        fail(
+            checks::ACCESSIBILITY,
+            "not granted — kanatad is not a trusted Accessibility client",
+            hint,
+        )
     }
 }
 
