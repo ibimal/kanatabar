@@ -1310,7 +1310,10 @@ fallback firing IS a finding (ledger #17).
   the app icon + a summary line ("N devices · M matched"). \[VERIFY #17]
 * [ ] **Content matches the CLI** — compare rows against `kanatactl devices`.
   **Expect:** same names; matched device(s) sorted first with a green dot +
-  `MATCHED` pill; unmatched rows show a gray dot.
+  `MATCHED` pill; unmatched rows show a gray dot. Devices with no product
+  string show as a dimmed italic "Unnamed device" (sorted last) in the window
+  and "Unnamed device" in the CLI — never a blank row/line (finding fixed
+  2026-07-17: two nameless IOHID devices rendered blank in both).
 * [ ] **Hotplug refreshes in place** — window open: plug, then unplug, the
   spare USB keyboard.
   **Expect:** the list updates by itself within \~1s each time (no re-open,

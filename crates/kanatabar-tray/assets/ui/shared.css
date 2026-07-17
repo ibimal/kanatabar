@@ -115,6 +115,12 @@ header p {
   white-space: nowrap;
 }
 
+/* Placeholder text (e.g. a device with no product string). */
+.dim {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
 .badge {
   font-size: 10px;
   font-weight: 600;

@@ -322,6 +322,28 @@ pub struct DeviceInfo {
     pub matched: bool,
 }
 
+impl DeviceInfo {
+    /// What every device-list surface shows when the name is blank. Some real
+    /// IOHID devices carry no product string (HW Run 10 finding, 2026-07-17)
+    /// — the wire `name` stays the raw truth; presentation goes through here
+    /// so the CLI and the devices window can never drift apart.
+    pub const UNNAMED: &'static str = "Unnamed device";
+
+    /// True when the device reported no usable product string.
+    pub fn is_unnamed(&self) -> bool {
+        self.name.trim().is_empty()
+    }
+
+    /// The name to display: the device's own, or [`Self::UNNAMED`].
+    pub fn display_name(&self) -> &str {
+        if self.is_unnamed() {
+            Self::UNNAMED
+        } else {
+            &self.name
+        }
+    }
+}
+
 /// Asynchronous events pushed to subscribers (SPEC §7.2 `Event{...}`).
 ///
 /// Tagged with `event` so the discriminator does not collide with the

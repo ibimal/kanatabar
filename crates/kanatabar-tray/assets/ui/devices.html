@@ -49,7 +49,7 @@ window.__render = (view) => {
   for (const row of view.rows) {
     const r = el("div", "row");
     r.appendChild(el("span", "dot" + (row.matched ? " on" : "")));
-    r.appendChild(el("span", "name", row.name));
+    r.appendChild(el("span", "name" + (row.unnamed ? " dim" : ""), row.name));
     if (row.matched) r.appendChild(el("span", "badge", "MATCHED"));
     list.appendChild(r);
   }

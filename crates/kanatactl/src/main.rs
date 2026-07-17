@@ -410,7 +410,13 @@ async fn devices(client: &mut Client) -> u8 {
                     return EXIT_OK;
                 }
                 for device in devices {
-                    println!("{} {}", if device.matched { "✔" } else { " " }, device.name);
+                    // display_name: nameless IOHID devices exist (HW Run 10);
+                    // a blank line here would look like broken output.
+                    println!(
+                        "{} {}",
+                        if device.matched { "✔" } else { " " },
+                        device.display_name(),
+                    );
                 }
                 EXIT_OK
             }
