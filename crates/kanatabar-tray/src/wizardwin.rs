@@ -183,7 +183,7 @@ mod tests {
             check(checks::DRIVER, false),
         ];
         let view = view(&checks, None, None);
-        assert_eq!(view.summary, "Step 3 of 7");
+        assert_eq!(view.summary, "Step 3 of 8");
         assert!(!view.done && view.completion.is_none());
         let current = &view.rows[2];
         assert_eq!(current.state, StepState::Current);
@@ -265,7 +265,7 @@ mod tests {
     fn view_json_shape_is_stable() {
         let json = serde_json::to_value(view(&[check(checks::VHID_MANAGED, false)], None, None))
             .expect("serializes");
-        assert_eq!(json["summary"], "Step 4 of 7");
+        assert_eq!(json["summary"], "Step 4 of 8");
         assert_eq!(json["done"], false);
         assert_eq!(json["completion"], serde_json::Value::Null);
         assert_eq!(

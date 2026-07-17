@@ -9,3 +9,4 @@ pub mod iokit;
 pub mod peercred;
 pub mod power;
 pub mod proc;
+pub mod tcc;

@@ -62,6 +62,7 @@ pub async fn run(
         vhid,
         vhid_managed_check(driver_probe.is_some()).await,
         input_monitoring_check(),
+        accessibility_check(),
         socket_check(socket_path),
         active_config_check(configmgr, peer_uid).await,
         config_file_check(configmgr).await,
@@ -338,36 +339,93 @@ fn driver_not_activated_check() -> DoctorCheck {
     }
 }
 
-/// TCC grants cannot be read without private APIs (TCC.db is SIP-protected
-/// even from root), so this is informational (always OK); the *runtime*
-/// detection is behavioral — a TCC-denied kanata crash is classified from its
-/// output into `Degraded{InputMonitoringDenied}` (§6.5).
-///
-/// Verified on HW (macOS 26.5.1, kanata 1.12, 2026-07-11) by a full grant
-/// matrix: the grants attach to **kanatad** (the launchd daemon is the TCC
-/// responsible process for its kanata child); BOTH Input Monitoring AND
-/// Accessibility are required; the kanata binary itself needs none (its
-/// self-registered entry is not consulted); linker-signed ad-hoc binaries
-/// hold grants fine. Because grants pin kanatad's code hash, a KanataBar
-/// update invalidates them (kanata updates do not).
-fn input_monitoring_check() -> DoctorCheck {
-    let daemon_bin = std::env::current_exe()
+/// kanatad's own binary path, for the permission fix hints (macOS shows the
+/// grant against this path). Falls back to the install location.
+fn daemon_bin_path() -> String {
+    std::env::current_exe()
         .map(|p| p.display().to_string())
-        .unwrap_or_else(|_| "/usr/local/bin/kanatad".to_string());
-    DoctorCheck {
-        name: checks::INPUT_MONITORING.to_string(),
-        ok: true,
-        detail: "cannot be verified automatically (TCC is unreadable by design); \
-                 a denial is detected at kanata startup and reported as Degraded"
-            .to_string(),
-        fix_hint: Some(format!(
-            "grant BOTH Input Monitoring AND Accessibility to {daemon_bin} in System \
-             Settings → Privacy & Security (+ button, Cmd+Shift+G to type the path) — \
-             macOS attributes kanata's device access to the supervising daemon, and \
-             kanata's own self-registered entry is NOT the one checked. After updating \
-             KanataBar, remove (−) and re-add (+) both entries (kanata updates don't \
-             affect them)"
-        )),
+        .unwrap_or_else(|_| "/usr/local/bin/kanatad".to_string())
+}
+
+/// The shared tail of both permission hints: TCC binds to kanatad's code
+/// identity, so a KanataBar update silently invalidates the grants even
+/// though the entries still show enabled — remove (−) and re-add (+) is the
+/// fix (SPEC §2 [HARD, verified]). Kanata updates do not affect them.
+const GRANT_HINT_TAIL: &str = "add it with the + button (Cmd+Shift+G types the path). \
+     macOS attributes kanata's device access to the supervising daemon, so kanata's own \
+     self-registered entry is NOT the one checked. After updating KanataBar, remove (−) \
+     and re-add (+) the entry (kanata updates don't affect it)";
+
+/// Input Monitoring grant for kanatad, read from the daemon's **own** access
+/// via `IOHIDCheckAccess` (SPEC §9, §11 [VERIFY]). The grants that govern
+/// kanata's device access attach to kanatad (the launchd job is the TCC
+/// responsible process — SPEC §2 [HARD, verified 2026-07-11]); the doctor
+/// runs in-process here, so it reads the grant that actually matters.
+///
+/// Conservative mapping (the daemon-context read is **HW-pending**,
+/// docs/HW-TESTS.md): a definitive `Denied` fails the check; `Granted` passes
+/// with a verified note; `Unknown` stays informational-OK — there the
+/// behavioral backstop remains the source of truth (a denied kanata dies at
+/// startup → `Degraded{InputMonitoringDenied}`, §6.5), so a daemon-context
+/// quirk can never false-red a working setup.
+fn input_monitoring_check() -> DoctorCheck {
+    use crate::ffi::tcc::{self, AccessStatus};
+    let hint = format!(
+        "grant Input Monitoring to {} in System Settings → Privacy & Security → \
+         Input Monitoring — {GRANT_HINT_TAIL}",
+        daemon_bin_path()
+    );
+    match tcc::input_monitoring_access() {
+        AccessStatus::Granted => ok(
+            checks::INPUT_MONITORING,
+            "granted (verified via IOHIDCheckAccess)",
+        ),
+        AccessStatus::Denied => fail(
+            checks::INPUT_MONITORING,
+            "denied — kanatad is not permitted to monitor input",
+            hint,
+        ),
+        AccessStatus::Unknown => DoctorCheck {
+            name: checks::INPUT_MONITORING.to_string(),
+            ok: true,
+            detail: "not yet determined (the grant read is indeterminate here); a denial \
+                     is caught at kanata startup and reported as Degraded"
+                .to_string(),
+            fix_hint: Some(hint),
+        },
+    }
+}
+
+/// Accessibility grant for kanatad, read from the daemon's **own** trust
+/// state via `AXIsProcessTrusted` (SPEC §9, §11 [VERIFY]). macOS requires
+/// BOTH this and Input Monitoring; surfacing them as separate checks lets the
+/// wizard guide each grant independently.
+///
+/// `AXIsProcessTrusted` is boolean (no indeterminate state), so pre-HW we
+/// stay conservative: `trusted` passes with a verified note; not-trusted
+/// stays informational-OK rather than a hard red, so a daemon-context quirk
+/// can't false-red a working setup. Flip not-trusted → `fail` once the
+/// daemon-context read is HW-confirmed (docs/HW-TESTS.md).
+fn accessibility_check() -> DoctorCheck {
+    let hint = format!(
+        "grant Accessibility to {} in System Settings → Privacy & Security → \
+         Accessibility — {GRANT_HINT_TAIL}",
+        daemon_bin_path()
+    );
+    if crate::ffi::tcc::accessibility_trusted() {
+        ok(
+            checks::ACCESSIBILITY,
+            "granted (verified via AXIsProcessTrusted)",
+        )
+    } else {
+        DoctorCheck {
+            name: checks::ACCESSIBILITY.to_string(),
+            ok: true,
+            detail: "not verified from the daemon context (HW-pending); a denial surfaces \
+                     at kanata startup"
+                .to_string(),
+            fix_hint: Some(hint),
+        }
     }
 }
 

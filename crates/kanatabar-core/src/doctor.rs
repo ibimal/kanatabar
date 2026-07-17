@@ -36,8 +36,16 @@ pub mod checks {
     /// Something supervises the VHID daemon across reboots (SPEC §6.5a):
     /// KanataBar's LaunchDaemon, Karabiner-Elements, or a user plist.
     pub const VHID_MANAGED: &str = "vhid daemon managed";
-    /// Input Monitoring permission (best-effort; SPEC §2, §11 [VERIFY]).
+    /// Input Monitoring permission for kanatad (SPEC §2, §11 [VERIFY]):
+    /// read from the daemon's own grant via `IOHIDCheckAccess`. A definitive
+    /// denial fails the check; an indeterminate result stays informational
+    /// (the runtime backstop is behavioral — see [`super`] and §6.5).
     pub const INPUT_MONITORING: &str = "input monitoring";
+    /// Accessibility permission for kanatad (SPEC §2, §11 [VERIFY]): read
+    /// from the daemon's own grant via `AXIsProcessTrusted`. Distinct from
+    /// [`INPUT_MONITORING`] — macOS requires BOTH, and surfacing them
+    /// separately lets the wizard guide each grant on its own.
+    pub const ACCESSIBILITY: &str = "accessibility";
     /// The control socket exists with the expected permissions (SPEC §3.2).
     pub const CONTROL_SOCKET: &str = "control socket";
     /// The active preset's `.kbd` passes `kanata --check` (SPEC §6.4).
@@ -51,7 +59,7 @@ pub mod checks {
 
 /// Every check name, in the canonical report order — the wizard and tests
 /// iterate this rather than hard-coding the list.
-pub const ALL_CHECKS: [&str; 12] = [
+pub const ALL_CHECKS: [&str; 13] = [
     checks::DAEMON,
     checks::KANATA_BINARY,
     checks::DRIVER_PRESENT,
@@ -60,6 +68,7 @@ pub const ALL_CHECKS: [&str; 12] = [
     checks::VHID_DAEMON,
     checks::VHID_MANAGED,
     checks::INPUT_MONITORING,
+    checks::ACCESSIBILITY,
     checks::CONTROL_SOCKET,
     checks::ACTIVE_CONFIG,
     checks::CONFIG_FILE,
@@ -69,12 +78,13 @@ pub const ALL_CHECKS: [&str; 12] = [
 /// The setup-class checks (SPEC §11.1): the wizard owns their fix, and the
 /// doctor window delegates their failures to it ([HARD] anti-overlap rule).
 /// Everything else in [`ALL_CHECKS`] is runtime-class (doctor-only).
-pub const SETUP_CHECKS: [&str; 6] = [
+pub const SETUP_CHECKS: [&str; 7] = [
     checks::DRIVER_PRESENT,
     checks::DRIVER_VERSION,
     checks::DRIVER,
     checks::VHID_MANAGED,
     checks::INPUT_MONITORING,
+    checks::ACCESSIBILITY,
     checks::DAEMON,
 ];
 

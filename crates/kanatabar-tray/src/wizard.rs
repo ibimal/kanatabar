@@ -111,17 +111,27 @@ pub fn steps() -> Vec<WizardStep> {
             verifies: Some(checks::VHID_MANAGED),
         },
         WizardStep {
-            title: "Grant Input Monitoring & Accessibility",
-            instruction: "Add /usr/local/bin/kanatad to BOTH Input Monitoring and \
-                          Accessibility (+ button, Cmd+Shift+G to type the path) — macOS \
-                          attributes kanata's device access to the supervising daemon and \
-                          requires both permissions; kanata's own self-registered entry is \
-                          not the one checked. After updating KanataBar, remove (−) and \
-                          re-add (+) both entries (kanata updates don't affect them).",
+            title: "Grant Input Monitoring",
+            instruction: "Add /usr/local/bin/kanatad to Input Monitoring (+ button, \
+                          Cmd+Shift+G to type the path) — macOS attributes kanata's device \
+                          access to the supervising daemon, so kanata's own self-registered \
+                          entry is not the one checked. After updating KanataBar, remove (−) \
+                          and re-add (+) this entry (kanata updates don't affect it).",
             run: None,
             open: Some(panes::INPUT_MONITORING),
             copy: None,
             verifies: Some(checks::INPUT_MONITORING),
+        },
+        WizardStep {
+            title: "Grant Accessibility",
+            instruction: "Add /usr/local/bin/kanatad to Accessibility too (+ button, \
+                          Cmd+Shift+G to type the path) — macOS requires BOTH permissions \
+                          on the supervising daemon. After updating KanataBar, remove (−) \
+                          and re-add (+) this entry (kanata updates don't affect it).",
+            run: None,
+            open: Some(panes::ACCESSIBILITY),
+            copy: None,
+            verifies: Some(checks::ACCESSIBILITY),
         },
         WizardStep {
             title: "Install the KanataBar service",
@@ -283,16 +293,17 @@ mod tests {
 
     #[test]
     fn a_runtime_degradation_overrides_a_green_checklist() {
-        // The HW Run 9 finding: every static check green (TCC is unreadable,
-        // so INPUT_MONITORING always passes) while the supervisor sits in
-        // Degraded{InputMonitoringDenied} — the wizard must jump to the
-        // grant step, not congratulate the user.
+        // The HW Run 9 finding: every static check green while the supervisor
+        // sits in Degraded{InputMonitoringDenied} — the wizard must jump to the
+        // grant step, not congratulate the user. (The static permission check
+        // can read a definitive denial now, but the behavioral degraded reason
+        // is still the runtime backstop when the static read is indeterminate.)
         let checks = ALL_CHECKS.map(|name| check(name, true));
         assert_eq!(
             first_unsatisfied(&checks, Some(DegradedReason::InputMonitoringDenied))
                 .unwrap()
                 .title,
-            "Grant Input Monitoring & Accessibility"
+            "Grant Input Monitoring"
         );
 
         // Same for a driver deactivated behind a green pkg-present check.

@@ -99,7 +99,13 @@ Non-goals: Linux/Windows; reimplementing remapping; a config *editor* GUI (open 
   supervisor architecture vs. running kanata as its own daemon, where every `brew upgrade
   kanata` breaks the grant — jtroo/kanata#1743). Plain linker-signed ad-hoc binaries hold
   grants fine (verified; no re-signing needed). TCC.db is SIP-protected even from root, so
-  grants **cannot be read programmatically** — detection is behavioral: a denied kanata dies
+  the grant *database* cannot be read — but kanatad **can** read its **own** grant via the
+  public per-process APIs (`IOHIDCheckAccess` for Input Monitoring, `AXIsProcessTrusted` for
+  Accessibility), which the doctor now does (kanatad is the responsible process, so its own
+  grant is the one that matters). Policy is conservative pending HW confirmation of the
+  daemon-context read (docs/HW-TESTS.md): a definitive Input-Monitoring `Denied` fails the
+  check, an indeterminate/untrusted read stays informational, and the runtime backstop
+  remains behavioral — a denied kanata dies
   with "kanata needs macOS Input Monitoring permission" (v1.12; older releases:
   `privilege violation`, kanata#1037), which the supervisor classifies from the child's
   output into `Degraded{InputMonitoringDenied}` — an actionable message, never a futile

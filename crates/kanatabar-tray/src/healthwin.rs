@@ -18,8 +18,8 @@ use crate::wizard;
 /// Everything the health page renders, in report order.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct HealthView {
-    /// One-line summary under the title ("All 12 checks passed" /
-    /// "2 of 12 checks failing").
+    /// One-line summary under the title ("All 13 checks passed" /
+    /// "2 of 13 checks failing").
     pub summary: String,
     /// True when every check passed (the page styles the summary by this).
     pub all_ok: bool,
@@ -48,6 +48,7 @@ fn display_label(name: &str) -> String {
         checks::VHID_DAEMON => "VHID daemon",
         checks::VHID_MANAGED => "VHID daemon managed",
         checks::INPUT_MONITORING => "Input Monitoring",
+        checks::ACCESSIBILITY => "Accessibility",
         checks::CONTROL_SOCKET => "Control socket",
         checks::ACTIVE_CONFIG => "Active config",
         checks::CONFIG_FILE => "Config file",
@@ -163,7 +164,7 @@ mod tests {
     fn all_green_report_summarizes_and_carries_no_actions() {
         let checks: Vec<DoctorCheck> = ALL_CHECKS.map(|n| check(n, true)).to_vec();
         let view = view(&checks);
-        assert_eq!(view.summary, "All 12 checks passed");
+        assert_eq!(view.summary, "All 13 checks passed");
         assert!(view.all_ok);
         assert!(view.rows.iter().all(|r| r.wizard_step.is_none()));
         // The copyable report is the raw §9 bundle, untransformed.
