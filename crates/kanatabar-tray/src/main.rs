@@ -51,6 +51,8 @@ enum UserEvent {
     /// The devices page reported its content height (logical px) for the
     /// shell's window fit.
     DevicesContentHeight(f64),
+    /// The devices page asked to close (Escape — panel convention).
+    DevicesCloseRequested,
 }
 
 /// Resolve the control-socket path (SPEC §3.2), overridable for dev/test.
@@ -190,6 +192,8 @@ fn main() -> Result<()> {
                         match ShellWindow::devices(target, move |message| {
                             if message == "ready" {
                                 let _ = proxy.send_event(UserEvent::DevicesPageReady);
+                            } else if message == "close" {
+                                let _ = proxy.send_event(UserEvent::DevicesCloseRequested);
                             } else if let Some(height) = message
                                 .strip_prefix("height:")
                                 .and_then(|v| v.parse::<f64>().ok())
@@ -260,6 +264,11 @@ fn main() -> Result<()> {
                     window.fit_content_height(height);
                 }
             }
+            Event::UserEvent(UserEvent::DevicesCloseRequested) => {
+                if let Some(window) = devices_window.as_ref() {
+                    window.hide();
+                }
+            }
             Event::UserEvent(UserEvent::DevicesChanged) => {
                 // Hotplug while the window is showing: refresh in place
                 // (SPEC §8). Hidden windows don't fetch.
@@ -276,19 +285,6 @@ fn main() -> Result<()> {
                 if let Some(window) = devices_window.as_ref() {
                     if window.id() == window_id {
                         window.hide();
-                    }
-                }
-            }
-            Event::WindowEvent {
-                window_id,
-                event: WindowEvent::Resized(size),
-                ..
-            } => {
-                // Content-fit bookkeeping: a user drag disables fitting
-                // until the window is next shown.
-                if let Some(window) = devices_window.as_mut() {
-                    if window.id() == window_id {
-                        window.handle_resized(size);
                     }
                 }
             }

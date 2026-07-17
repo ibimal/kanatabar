@@ -167,11 +167,19 @@ windows read as one product:
 - Windows are created lazily on first open and hidden (not destroyed) on close, so re-open is
   instant and single-instance by construction; the ~2 s poll runs only while a window is
   visible.
+- **Panels, not documents**: every Phase 12 window is **fixed-size** (non-resizable) — these
+  are glanceable utility surfaces, and the wizard is a fixed-size assistant by convention
+  (Karabiner/LuLu/installers). Non-resizable also makes the AX role read as a dialog, so
+  tiling window managers (AeroSpace/yabai) **float** them instead of tiling them into the
+  layout (HW finding 2026-07-17: a resizable devices window was tiled and reordered the
+  user's layout). Escape closes (page sends `close` over ipc; the shell hides). A true
+  `NSPanel` would need unsafe AppKit access — non-resizable gets the same practical behavior
+  within the toolkit.
 - **Content-fit height**: after each render the page reports its natural content height over
   ipc (`height:<px>`) and the shell fits the window to it, clamped to [240, 600] logical px —
-  short lists don't leave empty canvas, hotplug grows/shrinks by a row. A user resize wins:
-  the shell tells its own resize echo apart from a drag (`FitState`, unit-tested) and stops
-  fitting until the window is next shown. Cards hug their content; the canvas shows beneath.
+  short lists don't leave empty canvas, hotplug grows/shrinks by a row. With the windows
+  non-resizable, the shell's fit is the only sizing there is (no user-drag arbitration
+  needed). Cards hug their content; the canvas shows beneath.
 - Auto-open (wizard): after the tray's first successful doctor fetch, if `!setup_complete`.
 - Focus with `ActivationPolicy::Accessory`: showing a window from an accessory app needs an
   explicit activate; tao exposes this. [VERIFY in the HW checklist — first item.]

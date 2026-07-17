@@ -1334,9 +1334,13 @@ fallback firing IS a finding (ledger #17).
   **Expect:** the window height hugs the list (no sheet of empty canvas
   below the card; canvas margin only), clamped ≥240 / ≤600 logical px;
   hotplug while open grows/shrinks the window by about a row.
-* [ ] **A manual resize wins** — drag the window taller, then hotplug.
-  **Expect:** the window keeps YOUR size (no snap-back on refresh); after
-  close → re-open, content-fit resumes.
+* [ ] **Panel semantics** — inspect the window chrome and, if a tiling WM is
+  running (AeroSpace/yabai), where the window lands.
+  **Expect:** no resize handle and the zoom (green) button is disabled — the
+  shell's content-fit is the only sizing; a tiling WM **floats** the window
+  as a dialog instead of tiling it into the layout (finding 2026-07-17: the
+  resizable window was tiled by AeroSpace and reordered the layout); Escape
+  closes the window (hide, same as the close button).
 * [ ] **Dark/light** — toggle System Settings → Appearance with the window
   open.
   **Expect:** the window follows live (canvas/card/text/badge all flip; no

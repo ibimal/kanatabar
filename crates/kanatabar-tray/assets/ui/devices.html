@@ -64,6 +64,10 @@ window.__render = (view) => {
   }
   postHeight();
 };
+/* Panel convention: Escape closes (the shell hides the window). */
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && window.ipc) window.ipc.postMessage("close");
+});
 /* Tell the shell the page can render; it replies with the latest view, which
    closes the load-vs-first-push race without polling. (Guarded so the page
    also loads outside wry, e.g. design preview in a plain browser.) */
