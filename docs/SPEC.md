@@ -375,11 +375,16 @@ config = "/Users/alice/.config/kanata/gaming.kbd"
 - Connects, `Hello` + `Subscribe`, renders state; exponential reconnect when the daemon bounces.
 - **Menu:** state line + active layer (disabled items) · Start/Stop/Restart · Pause/Resume ·
   Presets submenu (checkmark) · Edit Config (opens in default editor) · Validate Config ·
-  Devices (list + which are matched) · View Logs · Setup Assistant… (demoted once setup is
+  Devices (window, see below) · View Logs · Setup Assistant… (demoted once setup is
   complete, §11.1) · Health Check… (the doctor window, §11.3) ·
   Launch at Login (agent toggle) · Quit KanataBar (tray only; daemon keeps running — say so).
   **No "Check for Updates" item** — updates are `brew upgrade` (§13), matching AeroSpace/
   kanata-tray precedent for un-notarized OSS menu-bar apps.
+- **Devices window** (Phase 12; docs/design/phase12-ui-layer.md): the Devices item opens a
+  window listing every visible input device with its matched/grabbed state, updating **in
+  place** on `DeviceChanged` events — the tray's subscription already delivers them, so no
+  polling and no re-open needed after hotplug. Read-only (no actions). Until Phase 12 lands,
+  the v0.1.x interim stays: a one-line notification summary.
 - **Icons:** template images (auto dark/light): running / paused / degraded (badge) / disconnected.
 - **Notifications:** crash, entered `Degraded` (with fix hint), recovery.
   If UNUserNotificationCenter is unavailable un-bundled during dev, use `osascript` fallback
@@ -670,7 +675,7 @@ Each phase: implement → `just check` → `just gate-N` → commit → update P
 | 9 | Dependency hardening: VHID-daemon management (§6.5a — detect/install/health-check our vhidd LaunchDaemon), driver-version-vs-kanata `doctor` check, wizard step | [AUTO] detection/plist logic + doctor checks against fixtures; [HW] reboot → kanata alive with no Karabiner-Elements installed |
 | 10 | Release (§12/§13): bundle, universal build, ad-hoc sign, pkg + tarball, GitHub Release + Homebrew tap, release workflow | [AUTO] packaging scripts run cleanly in CI; [HW] brew-install on a clean Mac → wizard → working remap; `brew upgrade` replaces both binaries and the daemon comes back |
 | 11 | *(Optional)* SMAppService registration path | design doc first, then implement |
-| 12 | Wizard & doctor windows (§11.2–§11.3). UI-layer design doc first (the tray has no windowing today — evaluate a minimal native window vs `egui`/`winit` against §4 constraints), then the doctor window (smaller lift: static list + buttons, replaces the temp-file report), then the live-rechecking wizard window with first-run auto-open | [AUTO] check-classification + step↔check mapping-inversion tests; doctor JSON schema still stable. [HW] clean-machine onboarding driven by the wizard window alone; doctor-window visual checklist incl. delegation into the wizard |
+| 12 | Wizard, doctor & devices windows (§11.2–§11.3, §8). UI-layer design doc first (docs/design/phase12-ui-layer.md — evaluate a minimal native window vs `egui`/`winit` vs webview against §4 constraints), then the devices window (smallest: read-only list, proves the shell), then the doctor window (static list + buttons, replaces the temp-file report), then the live-rechecking wizard window with first-run auto-open | [AUTO] check-classification + step↔check mapping-inversion + window view-model tests; doctor JSON schema still stable. [HW] clean-machine onboarding driven by the wizard window alone; doctor-window visual checklist incl. delegation into the wizard; hotplug flips the devices window in place |
 
 ---
 
