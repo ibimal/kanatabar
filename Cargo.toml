@@ -39,7 +39,9 @@ png = "0.18"
 proptest = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tao = { version = "0.35", default-features = false }
+# default-features off skips x11/dbus; rwh_06 gives windows the
+# raw-window-handle impl wry builds against (Phase 12).
+tao = { version = "0.35", default-features = false, features = ["rwh_06"] }
 tempfile = "3"
 thiserror = "2"
 tokio = { version = "1", features = [
@@ -56,6 +58,9 @@ toml = "0.9"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tray-icon = "0.24"
+# WKWebView windows for the Phase 12 UI (docs/design/phase12-ui-layer.md):
+# pairs with our pinned tao via raw-window-handle; system webview, no engine.
+wry = "0.55"
 
 [profile.release]
 strip = true

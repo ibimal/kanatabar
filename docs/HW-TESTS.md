@@ -1295,6 +1295,47 @@ first item meaningful; the upgrade/reinstall items can run on this machine.
 
 ***
 
+## Run 10 — Phase 12 windows: Devices (SPEC §8, docs/design/phase12-ui-layer.md)
+
+**Setup:** daemon up (`just run-dev`, or the installed daemon), then the tray
+**unbundled**: `cargo run -p kanatabar-tray`. Unbundled is the point — it
+answers the design doc's open question 2 (WKWebView in a bare binary under
+`ActivationPolicy::Accessory`). If window creation fails, the tray logs
+`devices window unavailable` and falls back to the old notification; that
+fallback firing IS a finding (ledger #17).
+
+* [ ] **Open & focus from the accessory tray** — menu → Devices….
+  **Expect:** a window titled "KanataBar Devices" appears **frontmost and
+  focused** (no Dock icon appears; the app stays an accessory), header shows
+  the app icon + a summary line ("N devices · M matched"). \[VERIFY #17]
+* [ ] **Content matches the CLI** — compare rows against `kanatactl devices`.
+  **Expect:** same names; matched device(s) sorted first with a green dot +
+  `MATCHED` pill; unmatched rows show a gray dot.
+* [ ] **Hotplug refreshes in place** — window open: plug, then unplug, the
+  spare USB keyboard.
+  **Expect:** the list updates by itself within \~1s each time (no re-open,
+  no flicker to empty). This is the `DeviceChanged` → re-fetch path.
+* [ ] **Hidden windows don't fetch** — close the window (hides), hotplug
+  again with debug logs on.
+  **Expect:** no `GetDevices` traffic while hidden; re-opening shows the
+  fresh list (a fetch fires on show).
+* [ ] **Close = hide, re-open instant** — close, re-open from the menu.
+  **Expect:** instant re-appearance (no reload flash), same scroll position.
+* [ ] **Dark/light** — toggle System Settings → Appearance with the window
+  open.
+  **Expect:** the window follows live (canvas/card/text/badge all flip; no
+  white flash).
+* [ ] **Daemon down renders in-window** — stop the daemon, click Devices….
+  **Expect:** the window shows "Device list unavailable" + the error line in
+  the card (red), not a notification; starting the daemon and re-opening
+  recovers.
+* [ ] **No network dependency** — Wi-Fi off, open the window.
+  **Expect:** identical rendering (page + icon are embedded; nothing remote).
+  \[VERIFY #18: also note the macOS version this ran on — the §4 macOS-12
+  floor can only be marked verified on a 12.x machine.]
+
+***
+
 ## Consolidated open \[VERIFY] ledger
 
 Resolve each during the run noted; record the answer here (these feed code
@@ -1319,6 +1360,8 @@ fixtures/constants):
 | 14  | Karabiner virtual-device product name + vendor id (0x16C0?)                                              | 6   | `device::is_karabiner_virtual`                                                 | ✅ 2026-07-12 (from `iokit_smoke` enumeration): product `Karabiner DriverKit VirtualHIDKeyboard 1.8.0`, vendor **5824 = 0x16C0** — confirms the assumed vendor id. (Bundle version `1.8.0` is in the product name; the name-prefix + vendor filter both hold.) HW re-confirm the feedback-loop suppression in Run 6. |
 | 15  | Panic-escape exit is code 0 (clean) on this kanata                                                       | 6/7 | `child::classify_unrequested_exit`                                             |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | 16  | Driver-major mismatch presents as green doctor + `Running` but no remapping — should supervisor Degrade? | 1   | `kanata::classify_backend_line` · `machine` · `supervisor` backend grace timer | ✅ 2026-07-11 (hw-fix-4): kanata 1.12.0 + driver **v8.0.0** → silent passthrough, all checks ✅, state `Running`; fixed by pinning driver to **v6.2.0**. Code fix landed: the release line (`output backend unavailable — releasing input devices`, verbatim fixture) now drives `Degraded{OutputBackendUnavailable}` after a 15s grace, **keeping the child** (kanata self-recovers; the `…ready — re-grabbing…` line flips back to Running). Screen-lock releases + write blips excluded. ✅ **HW re-verify PASSED 2026-07-13 (Run 5):** kill vhidd (bootout+pkill) → release line `output backend unavailable **during write** — releasing input devices` (the real line has "during write"; classifier substring-matches it) → 15s grace → `Degraded{OutputBackendUnavailable}` (exit 4) **from=Running, child kept alive same pid 67010** → bootstrap vhidd → recovery line verbatim `output backend and console session ready — re-grabbing input devices` → `from=Degraded to=Running`, **same pid**. ✅ Fixture added 2026-07-13 (hw-fix): the exact `output backend unavailable during write — releasing input devices` line now asserts `Down` in `classifies_backend_release_as_down`. |
+| 17  | WKWebView (wry) window creation works **unbundled** and `set_focus` fronts it under `ActivationPolicy::Accessory`? | 10  | `ui_shell` (Phase 12; a failure here triggers the design doc's Option-A fallback) |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| 18  | macOS 12 (§4 floor): do the WKWebView APIs wry 0.55 uses exist there?                                    | 10  | §4 minimum macOS; docs/design/phase12-ui-layer.md Q3                           |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 
 ## Reporting results
 

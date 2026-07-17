@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- Hardening (docs/design/phase12-ui-layer.md): nothing loads from anywhere
+     but the kbasset embed protocol; inline style/script are ours, and every
+     dynamic string is inserted with textContent, never innerHTML. -->
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; img-src kbasset:; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<meta name="color-scheme" content="light dark">
+<title>Devices</title>
+<style>
+/*__SHARED_CSS__*/
+</style>
+</head>
+<body>
+<header>
+  <img src="kbasset://app/icon.png" alt="">
+  <div>
+    <h1>Devices</h1>
+    <p id="summary">Loading…</p>
+  </div>
+</header>
+<div class="card" id="list">
+  <div class="empty">Waiting for the daemon…</div>
+</div>
+<script>
+"use strict";
+function el(tag, cls, text) {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+/* Called from Rust via evaluate_script with the serde-serialized
+   devwin::DevicesView (shape pinned by the lib's view_json_shape test). */
+window.__render = (view) => {
+  document.getElementById("summary").textContent = view.summary;
+  const list = document.getElementById("list");
+  list.replaceChildren();
+  if (view.error) {
+    list.appendChild(el("div", "error", view.error));
+    return;
+  }
+  if (!view.rows.length) {
+    list.appendChild(el("div", "empty", "No input devices are visible."));
+    return;
+  }
+  for (const row of view.rows) {
+    const r = el("div", "row");
+    r.appendChild(el("span", "dot" + (row.matched ? " on" : "")));
+    r.appendChild(el("span", "name", row.name));
+    if (row.matched) r.appendChild(el("span", "badge", "MATCHED"));
+    list.appendChild(r);
+  }
+};
+/* Tell the shell the page can render; it replies with the latest view, which
+   closes the load-vs-first-push race without polling. (Guarded so the page
+   also loads outside wry, e.g. design preview in a plain browser.) */
+if (window.ipc) window.ipc.postMessage("ready");
+</script>
+</body>
+</html>

@@ -11,13 +11,15 @@
 //! so the tray and its menu are guaranteed to share one `muda` instance (the
 //! menu-event global channel must match the tray that owns the menu).
 
+mod ui_shell;
+
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use kanatabar_core::backoff::BackoffConfig;
 use kanatabar_core::ipc::RequestPayload;
-use tao::event::{Event, StartCause};
+use tao::event::{Event, StartCause, WindowEvent};
 use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy};
 use tao::platform::macos::{ActivationPolicy, EventLoopExtMacOS};
 use tokio::sync::mpsc::UnboundedReceiver;
@@ -29,7 +31,9 @@ use kanatabar_tray::menu::{self, ids};
 use kanatabar_tray::model::MenuModel;
 use kanatabar_tray::notify::{BundledNotifier, Notifier, OsascriptNotifier};
 use kanatabar_tray::single_instance::{self, SingleInstanceLock};
-use kanatabar_tray::{icons, login, wizard};
+use kanatabar_tray::{devwin, icons, login, wizard};
+
+use ui_shell::ShellWindow;
 
 /// Events marshaled into the main-thread event loop.
 enum UserEvent {
@@ -38,6 +42,12 @@ enum UserEvent {
     Model(Box<MenuModel>),
     /// A menu item with this id was clicked.
     MenuClick(String),
+    /// A fresh device list arrived for the devices window (SPEC §8).
+    Devices(Box<devwin::DevicesView>),
+    /// The devices page loaded and can accept renders.
+    DevicesPageReady,
+    /// Hotplug: re-fetch the device list if the window is showing.
+    DevicesChanged,
 }
 
 /// Resolve the control-socket path (SPEC §3.2), overridable for dev/test.
@@ -124,8 +134,12 @@ fn main() -> Result<()> {
     let mut model = MenuModel::disconnected();
     let mut login_loaded = login::is_loaded(uid);
     let home = std::env::var_os("HOME").map(PathBuf::from);
+    // Phase 12 windows: created lazily on first open, hidden on close.
+    let mut devices_window: Option<ShellWindow> = None;
+    let ipc_proxy = event_loop.create_proxy();
+    let devices_proxy = event_loop.create_proxy();
 
-    event_loop.run(move |event, _target, control_flow| {
+    event_loop.run(move |event, target, control_flow| {
         *control_flow = ControlFlow::Wait;
 
         match event {
@@ -164,11 +178,38 @@ fn main() -> Result<()> {
                         );
                     }
                 } else if id == ids::DEVICES {
-                    run_devices_action(
-                        &action_handle,
-                        socket.clone(),
-                        Arc::clone(&action_notifier),
-                    );
+                    // Open (or re-show) the devices window (SPEC §8, Phase 12)
+                    // and fetch a fresh list. If the webview can't be created,
+                    // fall back to the v0.1.x notification so the menu item
+                    // still answers.
+                    if devices_window.is_none() {
+                        let proxy = ipc_proxy.clone();
+                        match ShellWindow::devices(target, move |message| {
+                            if message == "ready" {
+                                let _ = proxy.send_event(UserEvent::DevicesPageReady);
+                            }
+                        }) {
+                            Ok(window) => devices_window = Some(window),
+                            Err(err) => {
+                                tracing::warn!(%err, "devices window unavailable");
+                            }
+                        }
+                    }
+                    match devices_window.as_ref() {
+                        Some(window) => {
+                            window.show();
+                            fetch_devices_for_window(
+                                &action_handle,
+                                socket.clone(),
+                                devices_proxy.clone(),
+                            );
+                        }
+                        None => run_devices_action(
+                            &action_handle,
+                            socket.clone(),
+                            Arc::clone(&action_notifier),
+                        ),
+                    }
                 } else if id == ids::VIEW_LOGS {
                     // The daemon's logs; the folder also holds vhidd logs.
                     open_url("/Library/Logs/KanataBar");
@@ -193,9 +234,58 @@ fn main() -> Result<()> {
                     }
                 }
             }
+            Event::UserEvent(UserEvent::Devices(view)) => {
+                if let Some(window) = devices_window.as_mut() {
+                    match serde_json::to_string(&*view) {
+                        Ok(json) => window.render(json),
+                        Err(err) => tracing::warn!(%err, "devices view serialization failed"),
+                    }
+                }
+            }
+            Event::UserEvent(UserEvent::DevicesPageReady) => {
+                if let Some(window) = devices_window.as_mut() {
+                    window.page_ready();
+                }
+            }
+            Event::UserEvent(UserEvent::DevicesChanged) => {
+                // Hotplug while the window is showing: refresh in place
+                // (SPEC §8). Hidden windows don't fetch.
+                if devices_window.as_ref().is_some_and(ShellWindow::is_visible) {
+                    fetch_devices_for_window(&action_handle, socket.clone(), devices_proxy.clone());
+                }
+            }
+            Event::WindowEvent {
+                window_id,
+                event: WindowEvent::CloseRequested,
+                ..
+            } => {
+                // Phase 12 windows hide on close (instant re-open, state kept).
+                if let Some(window) = devices_window.as_ref() {
+                    if window.id() == window_id {
+                        window.hide();
+                    }
+                }
+            }
             _ => {}
         }
     })
+}
+
+/// Fetch the device list off-thread and marshal the view-model back into the
+/// event loop for the devices window (SPEC §8, Phase 12). Errors render in
+/// the window (devwin::error), not as notifications.
+fn fetch_devices_for_window(
+    handle: &tokio::runtime::Handle,
+    socket: PathBuf,
+    proxy: EventLoopProxy<UserEvent>,
+) {
+    handle.spawn(async move {
+        let view = match conn::fetch_devices(&socket).await {
+            Ok(devices) => devwin::view(&devices),
+            Err(err) => devwin::error(&err.to_string()),
+        };
+        let _ = proxy.send_event(UserEvent::Devices(Box::new(view)));
+    });
 }
 
 /// Bridge `conn::Update`s to the main thread; deliver notifications off-thread
@@ -215,6 +305,11 @@ async fn forward_updates(
             Update::Notify { title, body } => {
                 let notifier = Arc::clone(&notifier);
                 tokio::task::spawn_blocking(move || notifier.notify(&title, &body));
+            }
+            Update::DevicesChanged => {
+                if proxy.send_event(UserEvent::DevicesChanged).is_err() {
+                    return; // Event loop gone.
+                }
             }
         }
     }
@@ -618,7 +713,7 @@ fn build_menu(model: &MenuModel, login_loaded: bool) -> Menu {
     ));
     let _ = menu.append(&MenuItem::with_id(
         ids::DEVICES,
-        "Devices",
+        "Devices…",
         model.connected,
         None,
     ));

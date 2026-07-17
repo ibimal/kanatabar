@@ -31,11 +31,14 @@ objc2 = { workspace = true }
 objc2-foundation = { workspace = true }
 objc2-user-notifications = { workspace = true }
 png = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 tao = { workspace = true }
 tokio = { workspace = true }
 tray-icon = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+wry = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

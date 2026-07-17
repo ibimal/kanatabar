@@ -16,8 +16,10 @@
 //! - [`login`] — the "Launch at Login" LaunchAgent toggle.
 //! - [`single_instance`] — the per-user single-instance lock.
 //! - [`wizard`] — the first-run setup-wizard step model (SPEC §11).
+//! - [`devwin`] — the devices-window view-model (SPEC §8, Phase 12).
 
 pub mod conn;
+pub mod devwin;
 pub mod ffi;
 pub mod icons;
 pub mod login;

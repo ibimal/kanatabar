@@ -50,6 +50,9 @@ gate-9:
 gate-10:
     ./ci/gates/gate-10.sh
 
+gate-12:
+    ./ci/gates/gate-12.sh
+
 # Build both targets and lipo into a universal binary (Phase 10)
 build-universal:
     ./packaging/build-universal.sh

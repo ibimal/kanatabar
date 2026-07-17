@@ -30,6 +30,10 @@ pub enum Update {
         /// Notification body.
         body: String,
     },
+    /// The device set changed (hotplug). `DeviceChanged` carries a delta, not
+    /// the list, so this is a signal to re-fetch `GetDevices` — but only while
+    /// the devices window is visible (SPEC §8, Phase 12).
+    DevicesChanged,
 }
 
 /// Run the persistent event-stream connection forever: on each connect, seed
@@ -99,6 +103,11 @@ async fn stream_connection(mut client: Client, updates: &UnboundedSender<Update>
         // (e.g. after `kanatactl preset add`) without a reconnect.
         if matches!(event, kanatabar_core::ipc::Event::PresetsChanged) {
             session.set_presets(fetch_presets(&mut client).await?);
+        }
+        // Hotplug: let the devices window refresh in place (SPEC §8). The
+        // event carries only a delta, so the window re-fetches the list.
+        if matches!(event, kanatabar_core::ipc::Event::DeviceChanged { .. }) {
+            updates.send(Update::DevicesChanged)?;
         }
         session.apply_event(&event);
         send_model(&session, updates)?;

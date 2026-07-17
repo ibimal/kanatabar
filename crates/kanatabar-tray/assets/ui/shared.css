@@ -1,0 +1,139 @@
+/* KanataBar window design tokens — the one shared sheet every Phase 12 page
+   embeds unchanged (docs/design/phase12-ui-layer.md §5 "Visual design").
+   System font, macOS light/dark via prefers-color-scheme, 4px spacing grid,
+   card-on-canvas layout. No framework, no external resources. */
+
+:root {
+  color-scheme: light dark;
+  --bg: #f5f5f7;
+  --card: #ffffff;
+  --text: rgba(0, 0, 0, 0.85);
+  --text-secondary: rgba(0, 0, 0, 0.5);
+  --separator: rgba(0, 0, 0, 0.08);
+  --accent: #007aff;
+  --ok: #34c759;
+  --ok-bg: rgba(52, 199, 89, 0.14);
+  --err: #ff3b30;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #262628;
+    --card: #323234;
+    --text: rgba(255, 255, 255, 0.88);
+    --text-secondary: rgba(255, 255, 255, 0.55);
+    --separator: rgba(255, 255, 255, 0.1);
+    --accent: #0a84ff;
+    --ok: #30d158;
+    --ok-bg: rgba(48, 209, 88, 0.16);
+    --err: #ff453a;
+  }
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  font: 13px/1.45 -apple-system, system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex: none;
+}
+
+header img {
+  width: 40px;
+  height: 40px;
+}
+
+header h1 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+header p {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--separator);
+  border-radius: 10px;
+  overflow: hidden auto;
+  flex: 1;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-top: 1px solid var(--separator);
+}
+
+.row:first-child {
+  border-top: none;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--separator);
+}
+
+.dot.on {
+  background: var(--ok);
+}
+
+.name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  padding: 2px 7px;
+  border-radius: 99px;
+  color: var(--ok);
+  background: var(--ok-bg);
+  flex: none;
+}
+
+.empty,
+.error {
+  padding: 28px 16px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.error {
+  color: var(--err);
+}

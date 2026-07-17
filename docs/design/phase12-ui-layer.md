@@ -142,6 +142,26 @@ Core gains the §11.1 check classification next to `ALL_CHECKS` (`SETUP_CHECKS: 
 - The daemon remains the trust boundary: the window only displays doctor output and emits the
   same request ids the menu already can; no new daemon surface.
 
+### Visual design (one system, every page)
+
+All pages embed the same token sheet (`assets/ui/shared.css`) unchanged, so the
+windows read as one product:
+
+- **Native-feel**: system font stack (`-apple-system`), 13px base, macOS
+  light/dark palettes switched by `prefers-color-scheme` (`color-scheme: light
+  dark` so WKWebView's own backgrounds match — no white flash in dark mode).
+- **Layout**: card-on-canvas — a 16px padded canvas (`--bg`), content in
+  rounded 10px cards (`--card`) with hairline separators; header = 40px app
+  icon + title + secondary summary line. The icon is the committed 128px
+  iconset entry served as `kbasset://app/icon.png`, so windows, Dock, and
+  notifications share one identity.
+- **Status colors**: `--ok` green dot + `MATCHED` pill for active rows,
+  `--err` for failures, secondary-label gray for inert rows. Text selection
+  and cursors are disabled (these are windows, not documents).
+- **Fast**: no framework, no build step, no network, assets embedded in the
+  binary; windows are created once and hidden on close so re-open is instant;
+  pushes are single `__render(json)` calls into an already-loaded page.
+
 ### Window behavior
 
 - Windows are created lazily on first open and hidden (not destroyed) on close, so re-open is
@@ -171,9 +191,15 @@ the wizard adds the poll + auto-open.
 
 ## 6. Open questions (resolve before/at implementation, [VERIFY])
 
-1. Exact `wry` version compatible with `tao` 0.35 + MSRV; `cargo-deny` result for its tree.
+1. ~~Exact `wry` version compatible with `tao` 0.35 + MSRV; `cargo-deny` result for its
+   tree.~~ **Resolved (2026-07-17, devices window):** `wry` 0.55.1 builds against `tao`
+   0.35.3 with the `rwh_06` feature enabled (our `default-features = false` had dropped
+   tao's raw-window-handle impl) on MSRV 1.96. `cargo-deny` needed one addition: a
+   crate-scoped MPL-2.0 exception for `option-ext` (wry → dirs → dirs-sys), see deny.toml.
 2. WKWebView behavior unbundled and under `ActivationPolicy::Accessory` (focus, clipboard).
+   → docs/HW-TESTS.md Phase 12.
 3. Whether macOS 12 (§4 minimum) constrains any WKWebView API wry uses.
+   → verify alongside (2) on hardware.
 
-If (1)–(3) fail on hardware, fall back to Option A and amend CLAUDE.md's unsafe-confinement
+If (2)–(3) fail on hardware, fall back to Option A and amend CLAUDE.md's unsafe-confinement
 rule to include `kanatabar-tray/src/ffi` with per-call SAFETY comments.
