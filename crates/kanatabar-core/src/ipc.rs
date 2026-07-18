@@ -559,7 +559,7 @@ mod tests {
                     name: "driver".into(),
                     ok: false,
                     detail: "not activated".into(),
-                    fix_hint: Some("run Setup Wizard".into()),
+                    fix_hint: Some("run Setup Assistant".into()),
                 }],
             },
             ResponsePayload::LogLine {

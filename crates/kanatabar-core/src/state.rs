@@ -65,7 +65,7 @@ impl DegradedReason {
             Self::RetryBudgetExhausted => {
                 "kanata keeps crashing — restart it, or load the last-known-good config"
             }
-            Self::DriverNotActivated => "Karabiner driver not activated — run the Setup Wizard",
+            Self::DriverNotActivated => "Karabiner driver not activated — run the Setup Assistant",
             Self::VhidDaemonDown => {
                 "Karabiner VirtualHIDDevice daemon is not running — reinstall the Karabiner driver"
             }

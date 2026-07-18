@@ -266,7 +266,7 @@ fn driver_present_check(probe_enabled: bool) -> DoctorCheck {
             "Karabiner-DriverKit-VirtualHIDDevice pkg not installed \
              (no VirtualHIDDevice-Manager on disk)",
             "install the Karabiner-DriverKit-VirtualHIDDevice pkg named in your kanata \
-             release notes, then run the Setup Wizard to activate + approve it",
+             release notes, then run the Setup Assistant to activate + approve it",
         )
     }
 }
@@ -324,7 +324,7 @@ fn driver_not_activated_check() -> DoctorCheck {
             checks::DRIVER,
             "Karabiner DriverKit extension is not activated + enabled",
             format!(
-                "run the Setup Wizard, or `'{}' activate` and approve the extension in \
+                "run the Setup Assistant, or `'{}' activate` and approve the extension in \
                  System Settings → Privacy & Security",
                 manager.display()
             ),
@@ -335,7 +335,7 @@ fn driver_not_activated_check() -> DoctorCheck {
             "Karabiner-DriverKit-VirtualHIDDevice is not installed \
              (no VirtualHIDDevice-Manager on disk)",
             "install the Karabiner-DriverKit-VirtualHIDDevice pkg the kanata release \
-             notes name, then run the Setup Wizard",
+             notes name, then run the Setup Assistant",
         )
     }
 }

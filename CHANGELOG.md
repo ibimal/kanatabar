@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Native windows** (Phase 12): **Devices…** (live hotplug refresh),
+  **Health Check…** (every doctor check with details and fix hints; "Copy
+  report" carries the `doctor --json` bug-report bundle; setup-class failures
+  delegate to the Setup Assistant), and **Setup Assistant…** (auto-opens while
+  setup is incomplete, live re-check ~2 s, sudo steps are copyable text only).
+  Menu renames: "Setup Wizard…" → "Setup Assistant…", "Run Doctor" →
+  "Health Check…".
+- **Real permission checks, read live.** `doctor` now reads kanatad's own
+  Input Monitoring (`IOHIDCheckAccess`) and Accessibility
+  (`AXIsProcessTrusted`) grants — as two separate checks — via a fresh probe
+  child, so status is live: toggle the permission in System Settings and the
+  check (and the Setup Assistant step) flips within seconds. Previously the
+  check was informational-only ("TCC is unreadable").
+- **Self-healing permission recovery.** While degraded on a TCC denial, the
+  supervisor polls the grant every 3 s and restarts kanata automatically the
+  moment both permissions are granted — no commands, no daemon restart.
+- **"Set it up for me"** on the Setup Assistant's grant steps: the daemon
+  requests its own TCC entry (`IOHIDRequestAccess` /
+  `AXIsProcessTrustedWithOptions`), then the pane opens for the toggle.
+- **Shell completions** for `kanatactl` (bash/zsh/fish): installed into each
+  shell's standard lookup dir by `kanatactl install`, or printed with
+  `kanatactl completions <shell>`.
+- The Setup Assistant's completion panel shows the suggested
+  `kanatactl preset add` as a click-to-copy chip with a `~`-abbreviated path.
+
+### Changed
+
+- `doctor` grew from 12 to 13 checks (`accessibility` is new, and
+  `input monitoring` can now genuinely fail). Check labels in the Health
+  Check window render in sentence case; wire names are unchanged.
+
 ## [0.1.3] - 2026-07-16
 
 ### Added

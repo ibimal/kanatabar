@@ -538,7 +538,7 @@ impl Task {
                 DriverHealth::Ok => self.config.health.set_driver_ok(Some(true)),
                 DriverHealth::DriverNotActivated => {
                     self.config.health.set_driver_ok(Some(false));
-                    error!("driver not activated — run the Setup Wizard");
+                    error!("driver not activated — run the Setup Assistant");
                     return MachineEvent::Fault(DegradedReason::DriverNotActivated);
                 }
                 DriverHealth::VhidDaemonDown => {

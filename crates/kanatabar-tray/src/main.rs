@@ -617,7 +617,7 @@ async fn run_commands(socket: PathBuf, mut commands: UnboundedReceiver<RequestPa
 enum DoctorAction {
     /// "Run Doctor": notify a pass/fail summary; full checklist to the log.
     Report,
-    /// "Setup Wizard…": open the pane for the next unmet step (SPEC §11).
+    /// "Setup Assistant…" fallback: open the pane for the next unmet step (SPEC §11).
     Wizard,
 }
 

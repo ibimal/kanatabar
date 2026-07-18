@@ -18,9 +18,9 @@ KanataBar closes those gaps and makes kanata behave like a proper macOS service:
 
 - 🔌 **Hotplug re-sync** — an IOKit device watcher restarts kanata (debounced) when keyboards come and go, so a freshly plugged keyboard is remapped within moments.
 - 🚀 **Starts at boot, survives crashes** — a root LaunchDaemon supervises kanata with bounded exponential backoff, health checks, and sleep/wake re-sync; launchd revives the supervisor itself.
-- 🩺 **Actionable failure states** — driver missing, Input Monitoring denied, device grab conflicts, VHID daemon down: each becomes a distinct *Degraded* state with a fix hint, a notification, and a `doctor` check — not a silent crash loop.
+- 🩺 **Actionable failure states** — driver missing, Input Monitoring denied, device grab conflicts, VHID daemon down: each becomes a distinct *Degraded* state with a fix hint, a notification, and a `doctor` check — not a silent crash loop. Permission status is read live from macOS, and a permission denial **heals itself**: grant the permissions and kanata restarts automatically.
 - ⌨️ **VHID daemon management** — installs a LaunchDaemon for the Karabiner virtual-HID daemon when nothing else (e.g. Karabiner-Elements) manages it, and leaves it alone when something does.
-- 🖥️ **Menu-bar app** — live state and active layer, start/stop/pause/resume, preset switching, notifications, first-run wizard.
+- 🖥️ **Menu-bar app** — live state and active layer, start/stop/pause/resume, preset switching, notifications, and native windows for devices, health checks, and a self-verifying Setup Assistant.
 - 🧰 **Full-parity CLI** — everything the tray does, scriptable: `kanatactl status --json`, `watch`, `logs -f`, `preset switch`, `doctor`.
 - 📋 **Config presets with safe apply** — every `.kbd` is validated (`kanata --check`) before it's applied, with last-known-good rollback; a broken config never takes down a working setup.
 
@@ -61,10 +61,12 @@ cargo build --release
 sudo ./target/release/kanatactl install   # LaunchDaemon (supervisor) + LaunchAgent (menu bar)
 ```
 
-Then follow the menu-bar app's **Setup Wizard…** — it walks you through activating the
-driver, granting Input Monitoring + Accessibility, and verifying everything, one step at
-a time. Or do it headless with `kanatactl doctor`, which prints a fix hint for every
-failing check.
+Then follow the menu-bar app's **Setup Assistant…** — it walks you through activating
+the driver and granting Input Monitoring + Accessibility, one step at a time. Permission
+steps verify themselves live: click **Set it up for me**, flip the toggle in System
+Settings, and the step goes green within seconds — and once both permissions are
+granted, the daemon starts kanata by itself (no restarts, no commands). Or do it
+headless with `kanatactl doctor`, which prints a fix hint for every failing check.
 
 Uninstalling removes everything the installer created and nothing else:
 
@@ -75,10 +77,11 @@ sudo kanatactl uninstall
 ## Usage
 
 The menu bar shows a keycap icon with the current state; the menu has live state and
-layer lines, Start/Stop/Pause/Resume, a preset picker, and the wizard/doctor.
+layer lines, Start/Stop/Pause/Resume, a preset picker, and the **Devices…**,
+**Setup Assistant…**, and **Health Check…** windows.
 
 <p align="center">
-  <img src="docs/assets/menu.png" width="320" alt="KanataBar menu: live state and layer, Start/Stop/Restart, Pause/Resume, Presets, Devices, View Logs, Setup Wizard, Run Doctor, Launch at Login">
+  <img src="docs/assets/menu.png" width="320" alt="KanataBar menu: live state and layer, Start/Stop/Restart, Pause/Resume, Presets, Devices, View Logs, Setup Assistant, Health Check, Launch at Login">
 </p>
 
 | Icon | State | Meaning |
@@ -99,6 +102,7 @@ kanatactl config validate|apply|reload    check/apply a .kbd; reload config.toml
 kanatactl logs [-f]         the daemon's buffered log
 kanatactl devices           input devices the daemon can see
 kanatactl doctor [--json]   preflight checklist; --json doubles as a bug-report bundle
+kanatactl completions bash|zsh|fish   shell completions (install drops them in place)
 sudo kanatactl install|uninstall
 ```
 
@@ -111,6 +115,8 @@ sudo kanatactl install|uninstall
 ✅ driver version     bundle version vs kanata release notes
 ✅ vhid daemon        Karabiner VirtualHIDDevice daemon running
 ✅ vhid daemon managed  managed by KanataBar's LaunchDaemon
+✅ input monitoring   granted (IOHIDCheckAccess, fresh probe)
+✅ accessibility      granted (AXIsProcessTrusted, fresh probe)
 ✅ control socket     /var/run/kanatabar.sock (uid 0, mode 660)
 ✅ active config      passthrough (no preset active — remapping nothing) passes kanata --check
 ✅ config file        config.toml loaded (2 preset(s))
@@ -120,8 +126,8 @@ sudo kanatactl install|uninstall
 ### Presets
 
 Until you add a preset, KanataBar runs in **passthrough** — kanata is up and healthy
-but remaps nothing. The first-run wizard finds an existing `~/.config/kanata` config and
-tells you how to turn it into a preset; or add one yourself — no file editing:
+but remaps nothing. The Setup Assistant finds an existing `~/.config/kanata` config and
+offers the exact command to turn it into a preset; or add one yourself — no file editing:
 
 ```sh
 kanatactl preset add main ~/.config/kanata/main.kbd --autostart

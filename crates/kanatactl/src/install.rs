@@ -401,7 +401,7 @@ fn install_vhidd_daemon(
             _ if !binary_present => {
                 println!(
                     "Karabiner driver not installed (no VHID daemon binary); \
-                     run the Setup Wizard, then `sudo kanatactl install` again"
+                     run the Setup Assistant, then `sudo kanatactl install` again"
                 );
             }
             _ => {}

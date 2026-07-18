@@ -32,10 +32,10 @@ impl DriverState {
             DriverState::ActivatedEnabled => "Karabiner driver activated".to_string(),
             DriverState::Present { state } => format!(
                 "Karabiner driver present but not enabled ([{state}]) — approve it in \
-                 System Settings → Privacy & Security, or run the Setup Wizard"
+                 System Settings → Privacy & Security, or run the Setup Assistant"
             ),
             DriverState::NotFound => {
-                "Karabiner-DriverKit-VirtualHIDDevice not installed — run the Setup Wizard"
+                "Karabiner-DriverKit-VirtualHIDDevice not installed — run the Setup Assistant"
                     .to_string()
             }
         }

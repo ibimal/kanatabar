@@ -148,7 +148,7 @@ pub async fn send_command(socket: &Path, payload: RequestPayload) -> Result<()> 
     }
 }
 
-/// Fetch a one-shot `Status` over a fresh connection. The Setup Wizard pairs
+/// Fetch a one-shot `Status` over a fresh connection. The Setup Assistant pairs
 /// this with `fetch_doctor`: the supervisor's structured `degraded_reason`
 /// catches runtime-only failures (a TCC denial) that the static checks
 /// cannot see (SPEC §11; HW Run 9 finding).
@@ -165,7 +165,7 @@ pub async fn fetch_presets_once(socket: &Path) -> Result<Vec<PresetInfo>> {
 }
 
 /// Run `doctor` over a fresh connection and return its checks (SPEC §9), for
-/// the tray's "Run Doctor" / Setup Wizard actions (SPEC §11).
+/// the tray's "Health Check…" / Setup Assistant actions (SPEC §11).
 pub async fn fetch_doctor(socket: &Path) -> Result<Vec<DoctorCheck>> {
     let mut client = Client::connect(socket).await?;
     match client.request(RequestPayload::Doctor).await?.payload {

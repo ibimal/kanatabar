@@ -205,7 +205,7 @@ pub fn check_for_degraded_reason(reason: DegradedReason) -> Option<&'static str>
 /// i.e. the next thing the user should fix (SPEC §11). A supervisor
 /// degradation counts as its mapped check failing, even when the static check
 /// passes (see [`check_for_degraded_reason`]). `None` when every checked step
-/// is satisfied. Drives the tray's one-click "Setup Wizard…".
+/// is satisfied. Drives the tray's one-click "Setup Assistant…".
 pub fn first_unsatisfied(
     checks: &[DoctorCheck],
     degraded: Option<DegradedReason>,
