@@ -102,13 +102,18 @@ Non-goals: Linux/Windows; reimplementing remapping; a config *editor* GUI (open 
   the grant *database* cannot be read — but kanatad **can** read its **own** grant via the
   public per-process APIs (`IOHIDCheckAccess` for Input Monitoring, `AXIsProcessTrusted` for
   Accessibility), which the doctor now does (kanatad is the responsible process, so its own
-  grant is the one that matters). **HW-verified 2026-07-17 (docs/HW-TESTS.md #19):** the
-  daemon-context read is accurate both ways, so not-granted fails the check (red). **The
-  daemon's TCC verdict is launch-cached in BOTH directions** (re-verified 2026-07-18: a
-  revoke was still read as granted 60+ s later) — grant *and* revoke take effect only after
-  the daemon restarts, so toggling a pane must be followed by a daemon restart, and a
-  revoked grant shows a stale green until then. The runtime backstop
-  is therefore kept as belt-and-suspenders — a denied kanata dies
+  grant is the one that matters). **HW-verified 2026-07-17/18 (docs/HW-TESTS.md #19):** the
+  daemon-context read is accurate both ways, so not-granted fails the check (red). **A
+  process's TCC verdict is fixed at spawn** (launch-cached both directions; a revoke was
+  still read as granted 60+ s later in-process) — but **a freshly spawned child of the
+  responsible process is evaluated anew** (HW-confirmed live both directions), so the
+  doctor reads grants via a fresh `kanatad tcc-status` probe child per report and gets
+  **live** status with no restarts. Consequence of spawn-time verdicts: the running kanata
+  child keeps its old verdict too, so after granting, kanata must be respawned
+  (`kanatactl restart`) for remapping to pick the grant up — and by the same
+  child-attribution mechanism this should need no daemon restart ([VERIFY]: the
+  respawn-suffices half is pending one revoke/regrant test, HW-TESTS #19a). The runtime backstop
+  is kept as belt-and-suspenders — a denied kanata dies
   with "kanata needs macOS Input Monitoring permission" (v1.12; older releases:
   `privilege violation`, kanata#1037), which the supervisor classifies from the child's
   output into `Degraded{InputMonitoringDenied}` — an actionable message, never a futile
