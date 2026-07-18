@@ -25,9 +25,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Self-healing permission recovery.** While degraded on a TCC denial, the
   supervisor polls the grant every 3 s and restarts kanata automatically the
   moment both permissions are granted — no commands, no daemon restart.
-- **"Set it up for me"** on the Setup Assistant's grant steps: the daemon
-  requests its own TCC entry (`IOHIDRequestAccess` /
-  `AXIsProcessTrustedWithOptions`), then the pane opens for the toggle.
 - **Shell completions** for `kanatactl` (bash/zsh/fish): installed into each
   shell's standard lookup dir by `kanatactl install`, or printed with
   `kanatactl completions <shell>`.
@@ -39,6 +36,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `doctor` grew from 12 to 13 checks (`accessibility` is new, and
   `input monitoring` can now genuinely fail). Check labels in the Health
   Check window render in sentence case; wire names are unchanged.
+- The Health Check window re-checks every ~2 s while open (like the Setup
+  Assistant), so a permission granted or revoked while it's open updates in
+  place instead of going stale.
+
+### Fixed
+
+- `kanatactl status | head` (any piped, early-closed output) no longer
+  panics with a Broken pipe error; it exits quietly like other CLIs.
 
 ## [0.1.3] - 2026-07-16
 

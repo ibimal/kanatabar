@@ -105,14 +105,8 @@ window.__render = (view) => {
         run.addEventListener("click", () => post("run:" + row.index));
         actions.appendChild(run);
       }
-      if (row.request_label) {
-        const req = el("button", undefined, row.request_label);
-        req.addEventListener("click", () => post("request:" + row.index));
-        actions.appendChild(req);
-      }
       if (row.open_label) {
-        const primary = row.can_run || row.request_label;
-        const open = el("button", primary ? "quiet" : undefined, row.open_label);
+        const open = el("button", row.can_run ? "quiet" : undefined, row.open_label);
         open.addEventListener("click", () => post("open:" + row.index));
         actions.appendChild(open);
       }

@@ -63,10 +63,10 @@ sudo ./target/release/kanatactl install   # LaunchDaemon (supervisor) + LaunchAg
 
 Then follow the menu-bar app's **Setup Assistant…** — it walks you through activating
 the driver and granting Input Monitoring + Accessibility, one step at a time. Permission
-steps verify themselves live: click **Set it up for me**, flip the toggle in System
-Settings, and the step goes green within seconds — and once both permissions are
-granted, the daemon starts kanata by itself (no restarts, no commands). Or do it
-headless with `kanatactl doctor`, which prints a fix hint for every failing check.
+steps verify themselves live: flip the toggle in System Settings and the step goes green
+within seconds — and once both permissions are granted, the daemon starts kanata by
+itself (no restarts, no commands). Or do it headless with `kanatactl doctor`, which
+prints a fix hint for every failing check.
 
 Uninstalling removes everything the installer created and nothing else:
 

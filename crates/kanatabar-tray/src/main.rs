@@ -55,6 +55,11 @@ enum UserEvent {
     DevicesChanged,
     /// The wizard's ~2 s live re-check fired (SPEC §11.2).
     WizardTick,
+    /// The Health Check window's ~2 s live re-check fired — same rationale
+    /// as the wizard's: permission (TCC) changes produce no event, and the
+    /// doctor reads them live, so an open window must poll or go stale
+    /// (HW 2026-07-18: a granted permission kept showing red until reopen).
+    HealthTick,
     /// Startup found setup incomplete → auto-open the wizard (SPEC §11.2).
     AutoOpenWizard,
 }
@@ -184,6 +189,8 @@ fn main() -> Result<()> {
     let mut windows = Windows::default();
     // Guards the wizard's ~2 s re-check chain: at most one pending tick.
     let mut wizard_tick_pending = false;
+    // Same guard for the Health Check window's re-check chain.
+    let mut health_tick_pending = false;
     let ipc_proxy = event_loop.create_proxy();
     let data_proxy = event_loop.create_proxy();
 
@@ -335,26 +342,6 @@ fn main() -> Result<()> {
                         });
                     }
                 }
-                // "Set it up for me": ask the *daemon* to request the step's
-                // TCC permission (kanatad is the responsible process, not the
-                // tray), open the pane so the user can toggle it, then
-                // re-check. TCC approval fires no event, so we re-fetch.
-                PageMessage::RequestStep(index) => {
-                    if let Some(step) = wizard::steps().get(index) {
-                        if let Some(kind) = step.request {
-                            let open = step.open;
-                            let socket = socket.clone();
-                            let proxy = data_proxy.clone();
-                            action_handle.spawn(async move {
-                                request_permission(&socket, kind).await;
-                                if let Some(url) = open {
-                                    open_url(url);
-                                }
-                                fetch_wizard_view(&socket, &proxy).await;
-                            });
-                        }
-                    }
-                }
                 PageMessage::OpenStep(index) => {
                     if let Some(url) = wizard::steps().get(index).and_then(|s| s.open) {
                         open_url(url);
@@ -366,6 +353,29 @@ fn main() -> Result<()> {
             }
             Event::UserEvent(UserEvent::HealthData(view)) => {
                 render_page(&mut windows, PageId::Health, &*view);
+                // Live re-check while visible (same chain as the wizard):
+                // the permission checks read TCC live, so the report can
+                // change under an open window with no event to signal it.
+                let visible = windows
+                    .get(PageId::Health)
+                    .is_some_and(ShellWindow::is_visible);
+                if visible && !health_tick_pending {
+                    health_tick_pending = true;
+                    let proxy = data_proxy.clone();
+                    action_handle.spawn(async move {
+                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                        let _ = proxy.send_event(UserEvent::HealthTick);
+                    });
+                }
+            }
+            Event::UserEvent(UserEvent::HealthTick) => {
+                health_tick_pending = false;
+                if windows
+                    .get(PageId::Health)
+                    .is_some_and(ShellWindow::is_visible)
+                {
+                    fetch_health_for_window(&action_handle, socket.clone(), data_proxy.clone());
+                }
             }
             Event::UserEvent(UserEvent::WizardData(view)) => {
                 render_page(&mut windows, PageId::Wizard, &*view);
@@ -920,17 +930,6 @@ async fn run_step_command(argv: &'static [&'static str]) {
         Ok(Ok(status)) => tracing::warn!(cmd = ?argv, ?status, "wizard step command failed"),
         Ok(Err(err)) => tracing::warn!(cmd = ?argv, %err, "wizard step command not runnable"),
         Err(err) => tracing::warn!(cmd = ?argv, %err, "wizard step command panicked"),
-    }
-}
-
-/// Ask the daemon to request a TCC permission for itself (SPEC §11.2). The
-/// call must happen in kanatad — TCC attributes the grant to the responsible
-/// process — so the tray only sends the request; failure is logged, not
-/// fatal (the step still tells the user how to grant it by hand).
-async fn request_permission(socket: &std::path::Path, kind: kanatabar_core::ipc::PermissionKind) {
-    let payload = kanatabar_core::ipc::RequestPayload::RequestPermission { kind };
-    if let Err(err) = conn::send_command(socket, payload).await {
-        tracing::warn!(?kind, %err, "permission request to daemon failed");
     }
 }
 

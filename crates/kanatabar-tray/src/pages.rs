@@ -32,9 +32,6 @@ pub enum PageMessage {
     OpenWizard,
     /// Wizard page: run step `index`'s `run` argv ("Do it for me").
     RunStep(usize),
-    /// Wizard page: ask the daemon to request step `index`'s TCC permission
-    /// ("Set it up for me"), then open its pane.
-    RequestStep(usize),
     /// Wizard page: `open(1)` step `index`'s open target.
     OpenStep(usize),
 }
@@ -60,12 +57,6 @@ pub fn parse(page: PageId, message: &str) -> Option<PageMessage> {
         if let Some(index) = parse_index(message, "run:", steps.len()) {
             // Only steps that declare a run argv are runnable.
             return steps[index].run.map(|_| PageMessage::RunStep(index));
-        }
-        if let Some(index) = parse_index(message, "request:", steps.len()) {
-            // Only steps that map to a requestable permission.
-            return steps[index]
-                .request
-                .map(|_| PageMessage::RequestStep(index));
         }
         if let Some(index) = parse_index(message, "open:", steps.len()) {
             return steps[index].open.map(|_| PageMessage::OpenStep(index));
@@ -115,13 +106,9 @@ mod tests {
         let steps = wizard::steps();
         let runnable = steps.iter().position(|s| s.run.is_some()).expect("exists");
         let openable = steps.iter().position(|s| s.open.is_some()).expect("exists");
-        let requestable = steps
-            .iter()
-            .position(|s| s.request.is_some())
-            .expect("exists");
         let inert = steps
             .iter()
-            .position(|s| s.run.is_none() && s.open.is_none() && s.request.is_none())
+            .position(|s| s.run.is_none() && s.open.is_none())
             .expect("exists");
 
         assert_eq!(
@@ -129,22 +116,16 @@ mod tests {
             Some(PageMessage::RunStep(runnable))
         );
         assert_eq!(
-            parse(PageId::Wizard, &format!("request:{requestable}")),
-            Some(PageMessage::RequestStep(requestable))
-        );
-        assert_eq!(
             parse(PageId::Wizard, &format!("open:{openable}")),
             Some(PageMessage::OpenStep(openable))
         );
-        // A step with no run/open/request can't be actioned even with a valid index.
+        // A step with no run/open can't be actioned even with a valid index.
         assert_eq!(parse(PageId::Wizard, &format!("run:{inert}")), None);
         assert_eq!(parse(PageId::Wizard, &format!("open:{inert}")), None);
-        // A non-permission step rejects a request action.
-        assert_eq!(parse(PageId::Wizard, &format!("request:{runnable}")), None);
-        assert_eq!(
-            parse(PageId::Health, &format!("request:{requestable}")),
-            None
-        );
+        // Removed actions stay removed: `request:` (the Set-it-up-for-me
+        // experiment, HW 2026-07-18: system-context registration is a no-op)
+        // must parse as nothing rather than best-effort into another action.
+        assert_eq!(parse(PageId::Wizard, &format!("request:{openable}")), None);
         // Out-of-bounds and non-wizard pages are rejected.
         assert_eq!(parse(PageId::Wizard, &format!("run:{}", steps.len())), None);
         assert_eq!(parse(PageId::Health, &format!("run:{runnable}")), None);

@@ -73,11 +73,6 @@ pub struct StepRow {
     /// The current step has a command the wizard can run for the user
     /// ("Do it for me" — e.g. driver activation; never sudo).
     pub can_run: bool,
-    /// Label for the step's "request this permission for me" button, when the
-    /// step maps to a TCC permission the daemon can request (the grant steps).
-    /// `None` for non-permission and non-current rows. The page posts
-    /// `request:<index>`; the shell asks the daemon (never the tray) to run it.
-    pub request_label: Option<String>,
     /// Label for the step's open-target button, when it has one
     /// ("Open System Settings" / "Open download page").
     pub open_label: Option<String>,
@@ -147,8 +142,6 @@ fn row(index: usize, step: &WizardStep, state: StepState) -> StepRow {
         instruction: step.instruction.to_string(),
         state,
         can_run: state == StepState::Current && step.run.is_some(),
-        request_label: (state == StepState::Current && step.request.is_some())
-            .then(|| "Set it up for me".to_string()),
         open_label: (state == StepState::Current)
             .then_some(step.open)
             .flatten()
@@ -217,10 +210,11 @@ mod tests {
     }
 
     #[test]
-    fn grant_steps_offer_a_request_button_only_while_current() {
-        // The Input Monitoring grant step (current) offers "Set it up for me";
-        // a non-permission current step (activate) does not, and neither does
-        // a collapsed grant step.
+    fn grant_steps_open_their_pane_and_never_run_anything() {
+        // The grant steps' only action is opening the right Settings pane —
+        // HW 2026-07-18: the daemon's TCC request APIs register nothing from
+        // the system context, so there is no "do it for me" for permissions;
+        // the instruction teaches the manual +/path route.
         let im = view(&[check(checks::INPUT_MONITORING, false)], None, None);
         let current = im
             .rows
@@ -228,23 +222,8 @@ mod tests {
             .find(|r| r.state == StepState::Current)
             .expect("current");
         assert_eq!(current.title, "Grant Input Monitoring");
-        assert_eq!(current.request_label.as_deref(), Some("Set it up for me"));
-        // Collapsed rows (before/after) never carry the request affordance.
-        assert!(im
-            .rows
-            .iter()
-            .filter(|r| r.state != StepState::Current)
-            .all(|r| r.request_label.is_none()));
-
-        // A current step that isn't a permission step has no request button.
-        let activate = view(&[check(checks::DRIVER, false)], None, None);
-        let current = activate
-            .rows
-            .iter()
-            .find(|r| r.state == StepState::Current)
-            .expect("current");
-        assert_eq!(current.title, "Activate & approve the extension");
-        assert_eq!(current.request_label, None);
+        assert!(!current.can_run);
+        assert_eq!(current.open_label.as_deref(), Some("Open System Settings"));
     }
 
     #[test]
@@ -314,7 +293,6 @@ mod tests {
                 "instruction": wizard::steps()[3].instruction,
                 "state": "current",
                 "can_run": false,
-                "request_label": null,
                 "open_label": null,
                 "copy": "sudo kanatactl install",
             })

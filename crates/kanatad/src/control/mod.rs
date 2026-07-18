@@ -409,20 +409,6 @@ async fn handle_request(
             }
         }
 
-        RequestPayload::RequestPermission { kind } => {
-            use kanatabar_core::ipc::PermissionKind;
-            // The request runs here because TCC attributes the grant to the
-            // calling process, and kanatad is the responsible process for
-            // kanata's device access (SPEC §2 [HARD]). The tray can only ask
-            // us to do it.
-            let granted = match kind {
-                PermissionKind::InputMonitoring => crate::ffi::tcc::request_input_monitoring(),
-                PermissionKind::Accessibility => crate::ffi::tcc::request_accessibility(),
-            };
-            tracing::info!(?kind, granted, "TCC permission requested for kanatad");
-            Response::ack(id)
-        }
-
         // ── Devices & autostart (SPEC §7.2). ────────────────────────────────
         RequestPayload::GetDevices => Response {
             v: PROTOCOL_VERSION,

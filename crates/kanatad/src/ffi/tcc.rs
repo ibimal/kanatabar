@@ -9,21 +9,17 @@
 //! crucially they ask the OS "does the *calling* process hold this grant?"
 //! and do **not** read the SIP-protected TCC.db.
 //!
-//! [VERIFY / HW-pending] The reads' accuracy *from a root LaunchDaemon in the
-//! system context* is not yet hardware-verified (docs/HW-TESTS.md). The
-//! daemon-doctor policy is therefore conservative: a definitive `Denied` is
-//! trusted (a real failure), but `Unknown` falls back to the behavioral
-//! backstop (a denied kanata dies at startup → `Degraded{InputMonitoringDenied}`,
-//! §6.5) rather than risking a false red.
+//! HW-verified 2026-07-17/18 (docs/HW-TESTS.md #19): reads are accurate from
+//! the daemon context but launch-cached per process, so the doctor calls
+//! these from a freshly spawned probe child (`kanatad tcc-status`) for live
+//! status. TCC semantics captured on HW: an explicit deny record and a
+//! stale (pre-update) record both read `Denied`; **no record at all** reads
+//! `Granted` for Input Monitoring (allow-unless-denied for the root daemon)
+//! but not-trusted for Accessibility. The prompting *request* APIs
+//! (`IOHIDRequestAccess`/`AXIsProcessTrustedWithOptions`) were removed after
+//! HW showed they register nothing from the system context.
 //!
 //! All `unsafe` in the daemon lives under this module (CLAUDE.md, SPEC §14).
-
-use core_foundation::base::TCFType;
-use core_foundation::boolean::CFBoolean;
-use core_foundation::dictionary::CFDictionary;
-use core_foundation::string::CFString;
-use core_foundation_sys::dictionary::CFDictionaryRef;
-use core_foundation_sys::string::CFStringRef;
 
 /// The result of an `IOHIDCheckAccess` query (`IOHIDAccessType`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -72,19 +68,12 @@ const K_IOHID_ACCESS_TYPE_DENIED: u32 = 1;
 #[link(name = "IOKit", kind = "framework")]
 extern "C" {
     fn IOHIDCheckAccess(request_type: u32) -> u32;
-    // Triggers a TCC request for the calling process; returns whether access
-    // is (now) granted. Registers the process in the Input Monitoring pane.
-    fn IOHIDRequestAccess(request_type: u32) -> u8;
 }
 
 #[link(name = "ApplicationServices", kind = "framework")]
 extern "C" {
     // Apple's `Boolean` is an unsigned char; model it as u8 and compare != 0.
     fn AXIsProcessTrusted() -> u8;
-    fn AXIsProcessTrustedWithOptions(options: CFDictionaryRef) -> u8;
-    // Options key: when its value is true, the call prompts / registers the
-    // process in the Accessibility pane. A framework-provided CFString global.
-    static kAXTrustedCheckOptionPrompt: CFStringRef;
 }
 
 /// The calling process's Input Monitoring (listen-event) grant.
@@ -108,33 +97,4 @@ pub fn accessibility_trusted() -> bool {
     // SAFETY: `AXIsProcessTrusted` takes no arguments and only reads the
     // calling process's trust state; it never prompts.
     unsafe { AXIsProcessTrusted() != 0 }
-}
-
-/// Ask macOS to grant **this process** Input Monitoring (SPEC §11.2). From a
-/// GUI session this prompts; from the daemon's system context it registers
-/// kanatad's entry in the Input Monitoring pane (denied until the user
-/// toggles it). Returns whether access is granted afterward.
-///
-/// [VERIFY / HW-pending] Whether a root LaunchDaemon's request actually
-/// registers the entry from the system context is not yet hardware-confirmed
-/// (docs/HW-TESTS.md #19).
-pub fn request_input_monitoring() -> bool {
-    // SAFETY: pure request call, no pointer arguments; triggers a TCC request
-    // for the calling process and returns the resulting grant as a Boolean.
-    unsafe { IOHIDRequestAccess(K_IOHID_REQUEST_TYPE_LISTEN_EVENT) != 0 }
-}
-
-/// Ask macOS to grant **this process** Accessibility (SPEC §11.2), the
-/// prompting counterpart of [`accessibility_trusted`]. Same daemon-context
-/// caveat as [`request_input_monitoring`]. Returns the trust state afterward.
-pub fn request_accessibility() -> bool {
-    // SAFETY: `kAXTrustedCheckOptionPrompt` is a framework-provided CFString
-    // global, valid for the process lifetime; wrap under the get rule (no
-    // ownership transfer) to key the options dictionary.
-    let key = unsafe { CFString::wrap_under_get_rule(kAXTrustedCheckOptionPrompt) };
-    let options =
-        CFDictionary::from_CFType_pairs(&[(key.as_CFType(), CFBoolean::true_value().as_CFType())]);
-    // SAFETY: the options dict is passed by borrowed ref; the call reads it
-    // and returns the trust state, prompting when a GUI session is available.
-    unsafe { AXIsProcessTrustedWithOptions(options.as_concrete_TypeRef()) != 0 }
 }

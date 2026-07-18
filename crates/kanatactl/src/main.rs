@@ -185,6 +185,22 @@ impl InstallArgs {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
+    // `kanatactl status | head -2` must not panic: Rust ignores SIGPIPE, so
+    // printing to a closed pipe panics in std instead. Exit quietly with the
+    // conventional SIGPIPE code (141), like every other CLI in a pipeline.
+    // (A panic hook, not a SIGPIPE handler — no unsafe outside kanatad/ffi.)
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let broken_pipe = info
+            .payload()
+            .downcast_ref::<String>()
+            .is_some_and(|s| s.contains("Broken pipe"));
+        if broken_pipe {
+            std::process::exit(141);
+        }
+        default_hook(info);
+    }));
+
     let cli = Cli::parse();
 
     // install/uninstall never talk to the daemon (a fresh install runs before
