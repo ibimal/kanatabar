@@ -67,7 +67,9 @@ pub enum Component {
 }
 
 impl Component {
-    fn wants_daemon(self) -> bool {
+    /// Whether this selection includes the daemon half (which also carries
+    /// the CLI binary and its shell completions).
+    pub fn wants_daemon(self) -> bool {
         matches!(self, Component::Daemon | Component::Both)
     }
 
@@ -175,6 +177,50 @@ impl Paths {
             socket: under(prefix, "/var/run/kanatabar.sock"),
         }
     }
+}
+
+/// Shell-completion install locations, one per supported shell. Each is a
+/// path the shell already searches out of the box on macOS: Apple's zsh ships
+/// `/usr/local/share/zsh/site-functions` in the default `fpath`; fish's
+/// default `XDG_DATA_DIRS` covers `/usr/local/share` (→ its
+/// `fish/vendor_completions.d`); bash needs the `bash-completion` package,
+/// whose standard drop-in dir is `/usr/local/etc/bash_completion.d`.
+pub fn completion_files(prefix: &Path) -> [(clap_complete::Shell, PathBuf); 3] {
+    use clap_complete::Shell;
+    [
+        (
+            Shell::Bash,
+            under(prefix, "/usr/local/etc/bash_completion.d/kanatactl"),
+        ),
+        (
+            Shell::Zsh,
+            under(prefix, "/usr/local/share/zsh/site-functions/_kanatactl"),
+        ),
+        (
+            Shell::Fish,
+            under(
+                prefix,
+                "/usr/local/share/fish/vendor_completions.d/kanatactl.fish",
+            ),
+        ),
+    ]
+}
+
+/// Write the shell-completion scripts for `cmd` (the clap command tree — the
+/// caller owns it because the CLI definition lives in the binary, not this
+/// lib). Called by `kanatactl install` after the binaries land; the paths are
+/// removed again by [`uninstall`].
+pub fn install_completions(cmd: &mut clap::Command, cfg: &InstallConfig) -> Result<Vec<PathBuf>> {
+    check_privilege(cfg)?;
+    let mut created = Vec::new();
+    for (shell, path) in completion_files(&cfg.prefix) {
+        let mut buf = Vec::new();
+        clap_complete::generate(shell, cmd, "kanatactl", &mut buf);
+        let script = String::from_utf8(buf).context("generated completion is not UTF-8")?;
+        write_file(&path, &script, 0o644, cfg)?;
+        created.push(path);
+    }
+    Ok(created)
 }
 
 /// Join an absolute path onto `prefix`; identity when `prefix` is `/` (SPEC
@@ -309,6 +355,11 @@ pub fn uninstall(cfg: &InstallConfig) -> Result<UninstallReport> {
         remove_path(&paths.socket, &mut report)?;
         remove_path(&paths.support_dir, &mut report)?;
         remove_path(&paths.logs_dir, &mut report)?;
+        // Completion scripts ride with the CLI binary; their (shared) parent
+        // dirs are left alone, like usr/local/bin.
+        for (_, path) in completion_files(&cfg.prefix) {
+            remove_path(&path, &mut report)?;
+        }
     }
 
     if cfg.component.wants_agent() {
@@ -621,6 +672,50 @@ mod tests {
         assert_eq!(fs::read(&bin).unwrap(), b"#!/bin/sh\n", "content survives");
         let mode = fs::metadata(&bin).unwrap().permissions().mode();
         assert_eq!(mode & 0o777, 0o755);
+    }
+
+    #[test]
+    fn completions_install_for_all_three_shells_and_uninstall_removes_them() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let cfg = InstallConfig {
+            prefix: dir.path().to_path_buf(),
+            skip_launchctl: true,
+            component: Component::Daemon,
+        };
+        let mut cmd = clap::Command::new("kanatactl")
+            .subcommand(clap::Command::new("status"))
+            .subcommand(clap::Command::new("doctor"));
+
+        let created = install_completions(&mut cmd, &cfg).expect("install completions");
+        assert_eq!(created.len(), 3);
+        for (_, path) in completion_files(&cfg.prefix) {
+            let script =
+                fs::read_to_string(&path).unwrap_or_else(|_| panic!("missing {}", path.display()));
+            assert!(
+                script.contains("kanatactl"),
+                "{} does not mention kanatactl",
+                path.display()
+            );
+        }
+        // Zsh completion must be an autoloadable #compdef file (site-functions
+        // relies on it) — pin the marker so a clap_complete format change is
+        // caught here, not by users.
+        let zsh = fs::read_to_string(
+            dir.path()
+                .join("usr/local/share/zsh/site-functions/_kanatactl"),
+        )
+        .expect("zsh completion");
+        assert!(
+            zsh.starts_with("#compdef kanatactl"),
+            "not autoloadable: {}",
+            &zsh[..40.min(zsh.len())]
+        );
+
+        // Uninstall (daemon component) removes all three.
+        uninstall(&cfg).expect("uninstall");
+        for (_, path) in completion_files(&cfg.prefix) {
+            assert!(!path.exists(), "left behind: {}", path.display());
+        }
     }
 
     #[test]

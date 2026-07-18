@@ -20,6 +20,7 @@ path = "src/main.rs"
 kanatabar-core = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true }
+clap_complete = { workspace = true }
 nix = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

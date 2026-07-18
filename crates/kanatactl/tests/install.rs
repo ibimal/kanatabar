@@ -84,6 +84,10 @@ fn install_creates_exactly_the_expected_files() {
         PathBuf::from("usr/local/bin/kanatabar-tray"),
         PathBuf::from("Library/Logs/KanataBar"), // a dir, but create_dir_all leaves no file; see below
         PathBuf::from("Library/LaunchDaemons/io.github.ibimal.kanatabar.daemon.plist"),
+        // Shell completions ride with the CLI binary.
+        PathBuf::from("usr/local/etc/bash_completion.d/kanatactl"),
+        PathBuf::from("usr/local/share/zsh/site-functions/_kanatactl"),
+        PathBuf::from("usr/local/share/fish/vendor_completions.d/kanatactl.fish"),
     ];
     // The agent plist lands under the target user's home, wherever that
     // resolves in this environment (SUDO_UID or /dev/console owner).

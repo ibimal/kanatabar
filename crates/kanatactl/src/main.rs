@@ -6,7 +6,7 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, CommandFactory, Parser, Subcommand};
 use kanatabar_core::ipc::{DoctorCheck, Event, RequestPayload, ResponsePayload, Status};
 use kanatabar_core::state::SupervisorState;
 use kanatactl::install::{self, Component, InstallConfig};
@@ -89,6 +89,13 @@ enum Command {
     /// Undo `install`: bootout the launchd job(s) and remove every path they
     /// touched (SPEC §9, §10). Requires root (`sudo`).
     Uninstall(InstallArgs),
+    /// Print a shell-completion script to stdout. `install` already drops
+    /// these in each shell's standard lookup dir; this is for custom setups
+    /// (e.g. `kanatactl completions fish > ~/.config/fish/completions/kanatactl.fish`).
+    Completions {
+        /// Target shell.
+        shell: clap_complete::Shell,
+    },
 }
 
 #[derive(Subcommand)]
@@ -186,6 +193,16 @@ async fn main() -> ExitCode {
     let command = match cli.command {
         Command::Install(args) => return ExitCode::from(run_install(args)),
         Command::Uninstall(args) => return ExitCode::from(run_uninstall(args)),
+        Command::Completions { shell } => {
+            // Generate into a buffer: clap_complete panics on write errors,
+            // and a closed pipe (`kanatactl completions fish | head`) must
+            // not panic — ignore the write result instead.
+            let mut buf = Vec::new();
+            clap_complete::generate(shell, &mut Cli::command(), "kanatactl", &mut buf);
+            use std::io::Write;
+            let _ = std::io::stdout().write_all(&buf);
+            return ExitCode::from(EXIT_OK);
+        }
         other => other,
     };
 
@@ -229,7 +246,9 @@ async fn main() -> ExitCode {
             .await
         }
         Command::Doctor { json } => doctor(&mut client, json).await,
-        Command::Install(_) | Command::Uninstall(_) => unreachable!("handled above"),
+        Command::Install(_) | Command::Uninstall(_) | Command::Completions { .. } => {
+            unreachable!("handled above")
+        }
     };
     ExitCode::from(code)
 }
@@ -438,6 +457,18 @@ fn run_install(args: InstallArgs) -> u8 {
         Ok(report) => {
             for path in &report.created {
                 println!("installed {}", path.display());
+            }
+            // Completion scripts ride with the CLI binary (daemon component).
+            // Best-effort: a completions hiccup must not fail the install.
+            if config.component.wants_daemon() {
+                match install::install_completions(&mut Cli::command(), &config) {
+                    Ok(paths) => {
+                        for path in paths {
+                            println!("installed {}", path.display());
+                        }
+                    }
+                    Err(err) => eprintln!("warning: shell completions not installed: {err:#}"),
+                }
             }
             EXIT_OK
         }

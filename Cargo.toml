@@ -24,6 +24,7 @@ anyhow = "1"
 # directly for UNUserNotificationCenter (SPEC §8 notifications, bundled).
 block2 = "0.6"
 clap = { version = "4.5", features = ["derive", "env"] }
+clap_complete = "4.5"
 core-foundation = "0.10"
 core-foundation-sys = "0.8"
 libc = "0.2"
