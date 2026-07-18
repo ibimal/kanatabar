@@ -53,6 +53,7 @@ pub async fn run(
     started: Instant,
 ) -> Vec<DoctorCheck> {
     let (driver, vhid) = driver_checks(driver_probe).await;
+    let (input_monitoring, accessibility) = permission_checks().await;
     vec![
         daemon_check(started),
         kanata_binary_check(configmgr, health, peer_uid),
@@ -61,8 +62,8 @@ pub async fn run(
         driver_version_check(driver_probe.is_some(), health).await,
         vhid,
         vhid_managed_check(driver_probe.is_some()).await,
-        input_monitoring_check(),
-        accessibility_check(),
+        input_monitoring,
+        accessibility,
         socket_check(socket_path),
         active_config_check(configmgr, peer_uid).await,
         config_file_check(configmgr).await,
@@ -366,6 +367,85 @@ fn skip_permission_checks() -> bool {
 
 const PERMISSION_SKIPPED: &str = "skipped (permission preflight disabled)";
 
+/// The `kanatad tcc-status` probe output: this process's own grant reads, one
+/// `key=value` per line. Runs in the *spawned* probe child, so each call is a
+/// fresh TCC evaluation (the whole point — see [`probe_tcc_status`]).
+pub fn tcc_status_output() -> String {
+    use crate::ffi::tcc;
+    format!(
+        "input_monitoring={}\naccessibility={}\n",
+        tcc::input_monitoring_access(),
+        tcc::accessibility_trusted()
+    )
+}
+
+/// Parse [`tcc_status_output`]. `None` on any malformed/missing field —
+/// callers fall back to the in-process read rather than guess.
+fn parse_tcc_status(text: &str) -> Option<(crate::ffi::tcc::AccessStatus, bool)> {
+    let mut im = None;
+    let mut ax = None;
+    for line in text.lines() {
+        if let Some(v) = line.strip_prefix("input_monitoring=") {
+            im = v.trim().parse().ok();
+        } else if let Some(v) = line.strip_prefix("accessibility=") {
+            ax = v.trim().parse::<bool>().ok();
+        }
+    }
+    Some((im?, ax?))
+}
+
+/// Read the daemon's TCC grants via a **freshly spawned probe child**
+/// (`kanatad tcc-status`). The parent's own verdict is launch-cached in both
+/// directions (HW 2026-07-18, docs/HW-TESTS.md #19: a revoke still read
+/// `granted` 60+ s later), but TCC attributes a child to the responsible
+/// process — kanatad — so the child's read is evaluated afresh, giving the
+/// doctor live status the way a GUI app's poll gets it. `None` when the probe
+/// can't run or emits garbage; callers fall back to the in-process read.
+///
+/// [VERIFY / HW-pending, ledger #19]: the fresh-evaluation assumption for a
+/// system-context child. §14 note: the probe is `current_exe()` — the very
+/// binary already running as root, not a user-writable path lookup.
+async fn probe_tcc_status() -> Option<(crate::ffi::tcc::AccessStatus, bool)> {
+    let exe = std::env::current_exe().ok()?;
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        tokio::process::Command::new(exe).arg("tcc-status").output(),
+    )
+    .await
+    .ok()?
+    .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    parse_tcc_status(&String::from_utf8(output.stdout).ok()?)
+}
+
+/// Both permission checks, from one probe run (fresh-child read, in-process
+/// fallback). Returns `(input_monitoring, accessibility)`.
+async fn permission_checks() -> (DoctorCheck, DoctorCheck) {
+    use crate::ffi::tcc;
+    if skip_permission_checks() {
+        return (
+            ok(checks::INPUT_MONITORING, PERMISSION_SKIPPED),
+            ok(checks::ACCESSIBILITY, PERMISSION_SKIPPED),
+        );
+    }
+    let (im, ax, via) = match probe_tcc_status().await {
+        Some((im, ax)) => (im, ax, "fresh probe"),
+        // In-process fallback: accurate at daemon start, but launch-cached —
+        // stale across grant/revoke until the daemon restarts.
+        None => (
+            tcc::input_monitoring_access(),
+            tcc::accessibility_trusted(),
+            "in-process read; launch-cached",
+        ),
+    };
+    (
+        input_monitoring_check(im, via),
+        accessibility_check(ax, via),
+    )
+}
+
 /// Input Monitoring grant for kanatad, read from the daemon's **own** access
 /// via `IOHIDCheckAccess` (SPEC §9, §11). The grants that govern kanata's
 /// device access attach to kanatad (the launchd job is the TCC responsible
@@ -379,29 +459,26 @@ const PERMISSION_SKIPPED: &str = "skipped (permission preflight disabled)";
 /// after the daemon restarts (a process caches its launch-time TCC decision),
 /// so this stays red until then even after the user toggles the pane — which
 /// is correct, since remapping is genuinely broken until the restart.
-fn input_monitoring_check() -> DoctorCheck {
-    use crate::ffi::tcc::{self, AccessStatus};
-    if skip_permission_checks() {
-        return ok(checks::INPUT_MONITORING, PERMISSION_SKIPPED);
-    }
+fn input_monitoring_check(status: crate::ffi::tcc::AccessStatus, via: &str) -> DoctorCheck {
+    use crate::ffi::tcc::AccessStatus;
     let hint = format!(
         "grant Input Monitoring to {} in System Settings → Privacy & Security → \
          Input Monitoring — {GRANT_HINT_TAIL}",
         daemon_bin_path()
     );
-    match tcc::input_monitoring_access() {
+    match status {
         AccessStatus::Granted => ok(
             checks::INPUT_MONITORING,
-            "granted (verified via IOHIDCheckAccess)",
+            format!("granted (IOHIDCheckAccess, {via})"),
         ),
         AccessStatus::Denied => fail(
             checks::INPUT_MONITORING,
-            "denied — kanatad is not permitted to monitor input",
+            format!("denied — kanatad is not permitted to monitor input ({via})"),
             hint,
         ),
         AccessStatus::Unknown => fail(
             checks::INPUT_MONITORING,
-            "not granted — kanatad has no Input Monitoring grant",
+            format!("not granted — kanatad has no Input Monitoring grant ({via})"),
             hint,
         ),
     }
@@ -413,24 +490,21 @@ fn input_monitoring_check() -> DoctorCheck {
 /// each grant independently. HW-confirmed alongside Input Monitoring
 /// (docs/HW-TESTS.md #19): `trusted` passes, not-trusted fails. Same
 /// restart-to-take-effect caveat as [`input_monitoring_check`].
-fn accessibility_check() -> DoctorCheck {
-    if skip_permission_checks() {
-        return ok(checks::ACCESSIBILITY, PERMISSION_SKIPPED);
-    }
+fn accessibility_check(trusted: bool, via: &str) -> DoctorCheck {
     let hint = format!(
         "grant Accessibility to {} in System Settings → Privacy & Security → \
          Accessibility — {GRANT_HINT_TAIL}",
         daemon_bin_path()
     );
-    if crate::ffi::tcc::accessibility_trusted() {
+    if trusted {
         ok(
             checks::ACCESSIBILITY,
-            "granted (verified via AXIsProcessTrusted)",
+            format!("granted (AXIsProcessTrusted, {via})"),
         )
     } else {
         fail(
             checks::ACCESSIBILITY,
-            "not granted — kanatad is not a trusted Accessibility client",
+            format!("not granted — kanatad is not a trusted Accessibility client ({via})"),
             hint,
         )
     }
@@ -510,5 +584,42 @@ fn supervisor_check(supervisor: &SupervisorClient) -> DoctorCheck {
                 .unwrap_or_else(|| "see `kanatactl status`".to_string()),
         ),
         _ => ok(checks::SUPERVISOR, detail),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ffi::tcc::AccessStatus;
+
+    #[test]
+    fn tcc_status_output_round_trips_through_the_parser() {
+        // The probe child prints via tcc_status_output; the daemon parses the
+        // same shape back. Real grant values vary by context, so pin the
+        // format with synthetic lines and round-trip the live output's shape.
+        let (im, ax) =
+            parse_tcc_status("input_monitoring=denied\naccessibility=true\n").expect("parses");
+        assert_eq!(im, AccessStatus::Denied);
+        assert!(ax);
+        let (im, ax) = parse_tcc_status("accessibility=false\ninput_monitoring=granted\n")
+            .expect("order-independent");
+        assert_eq!(im, AccessStatus::Granted);
+        assert!(!ax);
+        // The live output (whatever this test context's grants are) parses.
+        assert!(parse_tcc_status(&tcc_status_output()).is_some());
+    }
+
+    #[test]
+    fn malformed_probe_output_is_rejected_not_guessed() {
+        for bad in [
+            "",
+            "input_monitoring=granted\n", // missing accessibility
+            "accessibility=true\n",       // missing input monitoring
+            "input_monitoring=yes\naccessibility=true", // unknown value
+            "input_monitoring=granted\naccessibility=1", // non-bool
+            "garbage",
+        ] {
+            assert!(parse_tcc_status(bad).is_none(), "accepted: {bad:?}");
+        }
     }
 }

@@ -42,6 +42,13 @@ struct Cli {
 enum Command {
     /// Run the supervisor in the foreground (launchd invokes this).
     Run(RunArgs),
+    /// Print this process's TCC grant status and exit. Hidden: the daemon's
+    /// doctor spawns it as a **fresh child** so each poll gets a fresh TCC
+    /// evaluation — the parent's own verdict is launch-cached both directions
+    /// (HW 2026-07-18, docs/HW-TESTS.md #19), while a child is attributed to
+    /// kanatad (the responsible process) and evaluated anew.
+    #[command(hide = true)]
+    TccStatus,
 }
 
 /// Phase 1 wiring: flags/env. Phase 3 moves defaults into the TOML config
@@ -144,6 +151,12 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Command::Run(args) => run(args, logbuf).await,
+        Command::TccStatus => {
+            // Machine-readable, one key=value per line; the daemon's doctor
+            // is the consumer (doctor::parse_tcc_status pins the format).
+            print!("{}", kanatad::doctor::tcc_status_output());
+            Ok(())
+        }
     }
 }
 

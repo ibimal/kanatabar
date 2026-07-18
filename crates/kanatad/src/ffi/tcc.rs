@@ -37,6 +37,30 @@ pub enum AccessStatus {
     Unknown,
 }
 
+/// Wire form for the `kanatad tcc-status` probe (`granted`/`denied`/
+/// `unknown`); [`std::str::FromStr`] is the inverse.
+impl std::fmt::Display for AccessStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            AccessStatus::Granted => "granted",
+            AccessStatus::Denied => "denied",
+            AccessStatus::Unknown => "unknown",
+        })
+    }
+}
+
+impl std::str::FromStr for AccessStatus {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, ()> {
+        match s {
+            "granted" => Ok(AccessStatus::Granted),
+            "denied" => Ok(AccessStatus::Denied),
+            "unknown" => Ok(AccessStatus::Unknown),
+            _ => Err(()),
+        }
+    }
+}
+
 // IOHIDRequestType (IOKit/hid/IOHIDLib.h): the access we care about is the
 // ability to *listen* to HID events (Input Monitoring).
 const K_IOHID_REQUEST_TYPE_LISTEN_EVENT: u32 = 1;
