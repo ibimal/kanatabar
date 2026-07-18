@@ -109,10 +109,11 @@ Non-goals: Linux/Windows; reimplementing remapping; a config *editor* GUI (open 
   responsible process is evaluated anew** (HW-confirmed live both directions), so the
   doctor reads grants via a fresh `kanatad tcc-status` probe child per report and gets
   **live** status with no restarts. Consequence of spawn-time verdicts: the running kanata
-  child keeps its old verdict too, so after granting, kanata must be respawned
-  (`kanatactl restart`) for remapping to pick the grant up — and by the same
-  child-attribution mechanism this should need no daemon restart ([VERIFY]: the
-  respawn-suffices half is pending one revoke/regrant test, HW-TESTS #19a). The runtime backstop
+  child keeps its old verdict too (a revoke does NOT kill it — verified — so remapping
+  keeps working until the next respawn, and doctor-red + `Running` is the truthful
+  combination), and after granting, a kanata respawn (`kanatactl restart`) alone picks the
+  grant up — **HW-verified 2026-07-18 (#19a): the full revoke → Degraded → re-grant →
+  respawn → Running cycle ran with zero daemon restarts.** The runtime backstop
   is kept as belt-and-suspenders — a denied kanata dies
   with "kanata needs macOS Input Monitoring permission" (v1.12; older releases:
   `privilege violation`, kanata#1037), which the supervisor classifies from the child's
