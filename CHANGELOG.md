@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-18
+
 ### Added
 
 - **Native windows** (Phase 12): **Devices…** (live hotplug refresh),
@@ -136,5 +138,6 @@ Initial public release. Hardware-verified end-to-end on macOS 26.5 with kanata 1
 - Clean uninstall: removes every installed path and launchd job, leaves shared
   directories and Karabiner files untouched (audited).
 
-[Unreleased]: https://github.com/ibimal/kanatabar/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/ibimal/kanatabar/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/ibimal/kanatabar/releases/tag/v0.2.0
 [0.1.0]: https://github.com/ibimal/kanatabar/releases/tag/v0.1.0

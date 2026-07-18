@@ -544,9 +544,9 @@ Window behavior (Phase 12):
   click (Docker diagnostics-bundle pattern).
 - Degraded-state notifications/banners (§8) are unchanged; the window is pull, not push.
 
-Until Phase 12 lands, the tray keeps the v0.1.x interim behavior: "Setup Wizard…" runs doctor
-and opens the pane for the first failing step; "Run Doctor" notifies a summary and opens the
-text report.
+(v0.1.x shipped an interim menu-only behavior — "Setup Wizard…" opened the pane for the
+first failing step, "Run Doctor" opened a text report. Phase 12 replaced both with the
+windows above; the text-report path survives only as the webview-creation fallback.)
 
 ---
 
