@@ -118,7 +118,11 @@ Non-goals: Linux/Windows; reimplementing remapping; a config *editor* GUI (open 
   with "kanata needs macOS Input Monitoring permission" (v1.12; older releases:
   `privilege violation`, kanata#1037), which the supervisor classifies from the child's
   output into `Degraded{InputMonitoringDenied}` — an actionable message, never a futile
-  crash loop. "exclusive access / already open" classifies as `Degraded{DeviceGrabConflict}`;
+  crash loop. While in that state the supervisor runs a **retry-on-grant watch** (HW
+  ledger #19): the fresh-child probe is polled every ~3 s, and the moment BOTH grants
+  read present, kanata is respawned automatically — recovery needs no user commands and
+  no daemon restart. (This is the sole, scoped exception to the supervisor's zero-polling
+  [HARD] rule: macOS has no TCC-change notification API, so even GUI apps poll for this.) "exclusive access / already open" classifies as `Degraded{DeviceGrabConflict}`;
   a TCP `AddrInUse` panic as `Degraded{TcpPortConflict}`. [VERIFY] the exact strings per
   kanata release.
 

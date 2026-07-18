@@ -75,7 +75,8 @@ impl DegradedReason {
                 "macOS denied kanata input access — grant BOTH Input Monitoring AND \
                  Accessibility to /usr/local/bin/kanatad in System Settings (kanata's own \
                  entry is not the one macOS checks); after updating KanataBar, remove (−) \
-                 and re-add (+) both entries"
+                 and re-add (+) both entries. KanataBar restarts kanata automatically \
+                 once both are granted"
             }
             Self::DeviceGrabConflict => {
                 "another program holds the keyboard (Karabiner-Elements grabber or a second \

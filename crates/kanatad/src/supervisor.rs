@@ -2,7 +2,12 @@
 //! and the timers, publishes transitions to subscribers (SPEC §6.1, §6.2).
 //!
 //! Zero polling [HARD]: the loop is a single `select!` over the command
-//! channel, the child's exit, and the two one-shot timers.
+//! channel, the child's exit, and the one-shot timers. **Scoped exception
+//! (SPEC §6.5, HW ledger #19):** while `Degraded{InputMonitoringDenied}` —
+//! and only then — a grant watch polls the fresh-child TCC probe every few
+//! seconds, because macOS offers no notification API for TCC changes (even
+//! GUI apps poll; Thaw ticks `AXIsProcessTrusted` every 3 s). The watch
+//! disarms the moment the state changes, so steady state stays event-driven.
 
 use std::collections::VecDeque;
 use std::pin::Pin;
@@ -18,6 +23,11 @@ use tracing::{debug, error, info, warn};
 use crate::child::{self, ChildWake, KanataChild, Preflight, SpawnError};
 use crate::config::{ActiveConfig, SupervisorConfig};
 use crate::statefile::{self, PersistedState};
+
+/// Retry-on-grant poll cadence (SPEC §6.5): how often the fresh-child TCC
+/// probe runs while `Degraded{InputMonitoringDenied}`. Matches Thaw's 3 s
+/// permission poll; each tick is one short-lived `kanatad tcc-status` spawn.
+const GRANT_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_secs(3);
 
 /// User/IPC commands the supervisor accepts (the tray and CLI map onto these
 /// in Phase 2).
@@ -160,6 +170,7 @@ pub fn start_with(config: SupervisorConfig, active: ActiveConfig) -> SupervisorH
             backoff_timer: None,
             healthy_timer: None,
             backend_timer: None,
+            grant_timer: None,
             events: event_tx.clone(),
             snapshot: snap_tx,
         }
@@ -184,6 +195,7 @@ enum Wake {
     BackoffElapsed,
     HealthyElapsed,
     BackendGraceElapsed,
+    GrantPollElapsed,
 }
 
 struct Task {
@@ -198,6 +210,13 @@ struct Task {
     /// the `Degraded{OutputBackendUnavailable}` transition; a recovery line
     /// inside the window cancels it (SPEC §6.5, HW 2026-07-11).
     backend_timer: Option<Pin<Box<Sleep>>>,
+    /// Retry-on-grant watch (SPEC §6.5; HW ledger #19): armed only while
+    /// `Degraded{InputMonitoringDenied}` — each tick asks the fresh-child TCC
+    /// probe whether BOTH grants are now present, and restarts kanata the
+    /// moment they are. A TCC denial used to be a terminal no-retry state
+    /// because the grant was unobservable; the probe makes it observable, so
+    /// no-retry becomes retry-exactly-when-granted (never a blind loop).
+    grant_timer: Option<Pin<Box<Sleep>>>,
     events: broadcast::Sender<StateChanged>,
     snapshot: watch::Sender<Snapshot>,
 }
@@ -206,6 +225,7 @@ impl Task {
     async fn run(mut self) {
         info!("supervisor loop started");
         loop {
+            self.sync_grant_watch();
             let wake = {
                 // Split borrows so the select arms don't fight over `self`.
                 let Task {
@@ -214,6 +234,7 @@ impl Task {
                     backoff_timer,
                     healthy_timer,
                     backend_timer,
+                    grant_timer,
                     ..
                 } = &mut self;
 
@@ -247,6 +268,12 @@ impl Task {
                             None => std::future::pending().await,
                         }
                     } => Wake::BackendGraceElapsed,
+                    () = async {
+                        match grant_timer.as_mut() {
+                            Some(t) => t.as_mut().await,
+                            None => std::future::pending().await,
+                        }
+                    } => Wake::GrantPollElapsed,
                 }
             };
 
@@ -386,7 +413,41 @@ impl Task {
                     info!("healthy window elapsed; retry budget reset");
                     self.dispatch(MachineEvent::HealthyElapsed).await;
                 }
+                Wake::GrantPollElapsed => {
+                    // Disarm; sync_grant_watch re-arms next iteration if the
+                    // state still calls for it (i.e. the grants aren't there
+                    // yet). The probe is a ~10 ms fork/exec; its 2 s timeout
+                    // bounds the worst case, and `biased` puts commands first
+                    // on the next iteration either way.
+                    self.grant_timer = None;
+                    if crate::doctor::tcc_grants_ready().await == Some(true) {
+                        info!(
+                            "Input Monitoring + Accessibility now granted \
+                             (fresh probe); restarting kanata"
+                        );
+                        self.dispatch(MachineEvent::Restart).await;
+                    }
+                }
             }
+        }
+    }
+
+    /// Arm/disarm the retry-on-grant watch to match the current state: armed
+    /// exactly while `Degraded{InputMonitoringDenied}` (and the permission
+    /// checks aren't test-skipped). Idempotent; called each loop iteration.
+    fn sync_grant_watch(&mut self) {
+        let wanted = self.machine.state() == SupervisorState::Degraded
+            && self.machine.degraded_reason() == Some(DegradedReason::InputMonitoringDenied)
+            && !crate::doctor::skip_permission_checks();
+        match (wanted, self.grant_timer.is_some()) {
+            (true, false) => {
+                debug!("TCC denial: watching for the grant (fresh probe every 3s)");
+                self.grant_timer = Some(Box::pin(tokio::time::sleep(GRANT_POLL_INTERVAL)));
+            }
+            (false, true) => {
+                self.grant_timer = None;
+            }
+            _ => {}
         }
     }
 

@@ -361,7 +361,7 @@ const GRANT_HINT_TAIL: &str = "add it with the + button (Cmd+Shift+G types the p
 /// reflects a grant when kanatad runs as the root LaunchDaemon, which `cargo
 /// test` can't provide, so tests set `KANATABAR_SKIP_PERMISSION_CHECK` to keep
 /// the permission checks green. Never set in production.
-fn skip_permission_checks() -> bool {
+pub(crate) fn skip_permission_checks() -> bool {
     std::env::var_os("KANATABAR_SKIP_PERMISSION_CHECK").is_some()
 }
 
@@ -402,9 +402,9 @@ fn parse_tcc_status(text: &str) -> Option<(crate::ffi::tcc::AccessStatus, bool)>
 /// doctor live status the way a GUI app's poll gets it. `None` when the probe
 /// can't run or emits garbage; callers fall back to the in-process read.
 ///
-/// [VERIFY / HW-pending, ledger #19]: the fresh-evaluation assumption for a
-/// system-context child. §14 note: the probe is `current_exe()` — the very
-/// binary already running as root, not a user-writable path lookup.
+/// HW-confirmed live both directions for BOTH permissions (ledger #19,
+/// 2026-07-18). §14 note: the probe is `current_exe()` — the very binary
+/// already running as root, not a user-writable path lookup.
 async fn probe_tcc_status() -> Option<(crate::ffi::tcc::AccessStatus, bool)> {
     let exe = std::env::current_exe().ok()?;
     let output = tokio::time::timeout(
@@ -418,6 +418,16 @@ async fn probe_tcc_status() -> Option<(crate::ffi::tcc::AccessStatus, bool)> {
         return None;
     }
     parse_tcc_status(&String::from_utf8(output.stdout).ok()?)
+}
+
+/// Live answer to "does kanatad hold BOTH grants right now?" via the fresh
+/// probe — the supervisor's retry-on-grant watch uses this while
+/// `Degraded{InputMonitoringDenied}` (SPEC §6.5). `None` when the probe
+/// fails (the watch keeps waiting rather than guessing; the in-process
+/// fallback would be launch-cached and could never observe the grant).
+pub(crate) async fn tcc_grants_ready() -> Option<bool> {
+    let (im, ax) = probe_tcc_status().await?;
+    Some(im == crate::ffi::tcc::AccessStatus::Granted && ax)
 }
 
 /// Both permission checks, from one probe run (fresh-child read, in-process
