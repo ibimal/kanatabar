@@ -99,6 +99,18 @@ pub fn kanata_config_dir(home: &std::path::Path) -> std::path::PathBuf {
     home.join(".config/kanata")
 }
 
+/// A natural preset name for an existing `.kbd`: the file stem, except the
+/// generic `config` (as in the common `~/.config/kanata/config.kbd`) maps to
+/// `main` — `preset add config …` reads like a subcommand, not a name. The
+/// single source for every surface that suggests a `preset add` command
+/// (CLI empty-list scan, wizard completion, notification fallback).
+pub fn suggested_preset_name(path: &std::path::Path) -> &str {
+    match path.file_stem().and_then(|s| s.to_str()) {
+        None | Some("config") => "main",
+        Some(stem) => stem,
+    }
+}
+
 /// A fault recognizable in kanata's output (SPEC §2, §6.5): conditions a
 /// respawn cannot fix, so the supervisor should go `Degraded` with the right
 /// hint instead of burning the retry budget.
@@ -227,6 +239,20 @@ pub fn parse_layer_change(line: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn suggested_preset_name_maps_generic_config_to_main() {
+        use std::path::Path;
+        assert_eq!(
+            suggested_preset_name(Path::new("/home/u/.config/kanata/config.kbd")),
+            "main"
+        );
+        assert_eq!(
+            suggested_preset_name(Path::new("/x/capsswap.kbd")),
+            "capsswap"
+        );
+        assert_eq!(suggested_preset_name(Path::new("")), "main");
+    }
+
     use super::*;
 
     #[test]

@@ -365,10 +365,7 @@ fn suggest_existing_configs() {
 
     println!("Found a kanata config — add it as a preset to start remapping:");
     for kbd in &kbds {
-        // A file literally named `config.kbd` makes a poor preset name; fall
-        // back to `main` so the suggested command reads naturally.
-        let stem = kbd.file_stem().and_then(|s| s.to_str()).unwrap_or("main");
-        let name = if stem == "config" { "main" } else { stem };
+        let name = kanatabar_core::kanata::suggested_preset_name(kbd);
         println!("  kanatactl preset add {name} {}", kbd.display());
     }
 }

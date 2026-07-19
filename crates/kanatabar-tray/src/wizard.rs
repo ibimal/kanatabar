@@ -196,17 +196,30 @@ pub fn first_unsatisfied(
     checks: &[DoctorCheck],
     degraded: Option<DegradedReason>,
 ) -> Option<WizardStep> {
-    let mut failed: BTreeSet<&str> = checks
+    let failed: BTreeSet<&str> = checks
         .iter()
         .filter(|c| !c.ok)
         .map(|c| c.name.as_str())
         .collect();
-    if let Some(name) = degraded.and_then(check_for_degraded_reason) {
-        failed.insert(name);
-    }
-    steps()
+    // Live checks are authoritative (they read TCC via the fresh probe): the
+    // first step whose own check is failing wins. Only when nothing is
+    // statically failing does a runtime degradation pick the step — kanata
+    // itself hit the mapped condition even though the checks look clean
+    // (HW Run 9). The precedence matters (HW machine-2, 2026-07-19): after an
+    // update invalidates BOTH grants, Degraded{InputMonitoringDenied} maps to
+    // the Input Monitoring step, but once the user re-grants IM the failing
+    // check is Accessibility — the wizard must advance to that step instead
+    // of pinning the one whose check already passes. The degradation itself
+    // can't say which permission is missing (kanata's error is one message);
+    // the checks can.
+    if let Some(step) = steps()
         .into_iter()
         .find(|step| step.verifies.is_some_and(|name| failed.contains(name)))
+    {
+        return Some(step);
+    }
+    let name = degraded.and_then(check_for_degraded_reason)?;
+    steps().into_iter().find(|step| step.verifies == Some(name))
 }
 
 #[cfg(test)]
@@ -318,6 +331,25 @@ mod tests {
         assert_eq!(
             first_unsatisfied(&checks, Some(DegradedReason::RetryBudgetExhausted)),
             None
+        );
+    }
+
+    #[test]
+    fn degradation_defers_to_a_statically_failing_permission_step() {
+        // HW machine-2 (2026-07-19): an update invalidated BOTH grants →
+        // Degraded{InputMonitoringDenied}. The user re-granted Input
+        // Monitoring (its live check now passes) but not yet Accessibility.
+        // The wizard must advance to the Accessibility step — the one whose
+        // check is actually failing — not stay pinned on the Input Monitoring
+        // step via the degraded mapping.
+        let checks: Vec<DoctorCheck> = ALL_CHECKS
+            .map(|name| check(name, name != checks::ACCESSIBILITY))
+            .to_vec();
+        assert_eq!(
+            first_unsatisfied(&checks, Some(DegradedReason::InputMonitoringDenied))
+                .unwrap()
+                .title,
+            "Grant Accessibility"
         );
     }
 

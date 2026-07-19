@@ -734,7 +734,7 @@ async fn wizard_completion(socket: &std::path::Path) -> (String, String) {
         .map(|home| existing_kanata_configs(&home))
         .unwrap_or_default();
     if let Some(first) = found.first() {
-        let name = first.file_stem().and_then(|s| s.to_str()).unwrap_or("main");
+        let name = kanatabar_core::kanata::suggested_preset_name(first);
         (
             "KanataBar is ready".to_string(),
             format!(
@@ -775,7 +775,7 @@ async fn wizard_completion_window(socket: &std::path::Path) -> wizardwin::Comple
         .map(existing_kanata_configs)
         .unwrap_or_default();
     if let Some(first) = found.first() {
-        let name = first.file_stem().and_then(|s| s.to_str()).unwrap_or("main");
+        let name = kanatabar_core::kanata::suggested_preset_name(first);
         wizardwin::Completion {
             message: "All checks passed. Found your kanata config — add it as a preset to \
                       start remapping:"

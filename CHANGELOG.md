@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-07-19
+
+### Fixed
+
+- Setup Assistant: while the daemon was degraded on a permission denial, the
+  wizard stayed pinned on the "Grant Input Monitoring" step even after that
+  permission was granted, instead of advancing to the still-missing
+  Accessibility step (hit on a real `brew upgrade`: an update invalidates both
+  grants, and re-granting the first one didn't move the wizard forward). The
+  live permission checks now take precedence; the degraded-state mapping is
+  only a fallback when no check is failing.
+- The Setup Assistant's completion suggestion for an existing
+  `~/.config/kanata/config.kbd` now proposes the preset name `main` instead of
+  `config` (matching the CLI's suggestion), so the command reads naturally.
+
 ## [0.2.0] - 2026-07-18
 
 ### Added
@@ -138,6 +153,7 @@ Initial public release. Hardware-verified end-to-end on macOS 26.5 with kanata 1
 - Clean uninstall: removes every installed path and launchd job, leaves shared
   directories and Karabiner files untouched (audited).
 
-[Unreleased]: https://github.com/ibimal/kanatabar/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/ibimal/kanatabar/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/ibimal/kanatabar/releases/tag/v0.2.1
 [0.2.0]: https://github.com/ibimal/kanatabar/releases/tag/v0.2.0
 [0.1.0]: https://github.com/ibimal/kanatabar/releases/tag/v0.1.0
