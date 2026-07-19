@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-07-19
+
+The validated 0.2.1, promoted. KanataBar is feature-complete per its spec:
+supervision, health, presets, the menu-bar app with native Devices / Health
+Check / Setup Assistant windows, live permission status with self-healing
+recovery, and clean install/uninstall. Both Homebrew paths (upgrade and clean
+install) are verified on a second machine; the full hardware runbook
+(docs/HW-TESTS.md) is green on macOS 26.5 with kanata 1.12.0. Earlier macOS
+versions (the cask floor is Ventura) are untested — reports welcome.
+
+No code changes from 0.2.1.
+
 ## [0.2.1] - 2026-07-19
 
 ### Fixed
@@ -153,7 +165,8 @@ Initial public release. Hardware-verified end-to-end on macOS 26.5 with kanata 1
 - Clean uninstall: removes every installed path and launchd job, leaves shared
   directories and Karabiner files untouched (audited).
 
-[Unreleased]: https://github.com/ibimal/kanatabar/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/ibimal/kanatabar/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/ibimal/kanatabar/releases/tag/v1.0.0
 [0.2.1]: https://github.com/ibimal/kanatabar/releases/tag/v0.2.1
 [0.2.0]: https://github.com/ibimal/kanatabar/releases/tag/v0.2.0
 [0.1.0]: https://github.com/ibimal/kanatabar/releases/tag/v0.1.0
