@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Homebrew cask: after a manual `sudo kanatactl uninstall`, every
+  `brew upgrade`/`install`/`uninstall` failed with "uninstall script
+  /usr/local/bin/kanatactl does not exist". The cask's uninstall now runs via
+  `/bin/sh` with an existence guard. (Fixed directly in the tap for 1.0.0;
+  the template fix here covers future releases.)
+
 ## [1.0.0] - 2026-07-19
 
 The validated 0.2.1, promoted. KanataBar is feature-complete per its spec:

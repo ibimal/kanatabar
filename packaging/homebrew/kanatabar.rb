@@ -13,16 +13,23 @@ cask "kanatabar" do
 
   pkg "KanataBar-#{version}.pkg"
 
+  # /bin/sh (always present) is the executable, not kanatactl: if the user
+  # already ran `sudo kanatactl uninstall` by hand, the binary is gone and a
+  # direct reference would make every brew upgrade/reinstall/uninstall fail
+  # with "uninstall script does not exist".
   uninstall script:  {
-              executable: "/usr/local/bin/kanatactl",
-              args:       ["uninstall"],
+              executable: "/bin/sh",
+              args:       [
+                "-c",
+                "[ -x /usr/local/bin/kanatactl ] && /usr/local/bin/kanatactl uninstall || true",
+              ],
               sudo:       true,
             },
             pkgutil: "io.github.ibimal.kanatabar"
 
   caveats <<~EOS
     KanataBar requires kanata and the Karabiner-DriverKit-VirtualHIDDevice
-    driver; the menu bar Setup Wizard walks you through installing both and
+    driver; the menu bar Setup Assistant walks you through installing both and
     granting the needed permissions.
 
     KanataBar is not notarized (no paid Apple Developer account — see the
